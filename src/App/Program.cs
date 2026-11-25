@@ -18,7 +18,7 @@ static class Program {
             if(actual.Size!=expected.Size)return 1;
             for(int y=0;y<actual.Height;y++)for(int x=0;x<actual.Width;x++)
                 if(actual.GetPixel(x,y)!=expected.GetPixel(x,y))return 1;
-            return 0;
+            return form.VerifyInterfaceLayout()?0:1;
         }
         ApplicationConfiguration.Initialize();Application.Run(new MainForm());return 0;
     }
@@ -34,6 +34,10 @@ sealed partial class MainForm:Form{
     readonly Button scan=new(){Text="Localizar clusters"},analyze=new(){Text="Analisar (sem alterações)"},reset=new(){Text="Confirmar e reinstalar",Enabled=false},backups=new(){Text="Central de backups"},website=new(){Text="Site / atualizações"};
     readonly Label status=new(){Text="Selecione as pastas e os mundos.",AutoSize=false,Dock=DockStyle.Fill,ForeColor=Muted,AutoEllipsis=true};
     readonly ComboBox mode=new(){DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill};
+    readonly ProgressBar activity=new(){Dock=DockStyle.Right,Width=110,Style=ProgressBarStyle.Marquee,MarqueeAnimationSpeed=25,Visible=false};
+    readonly Label recoveryNotice=new(){Dock=DockStyle.Fill,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Muted};
+    readonly ToolTip hints=new(){AutoPopDelay=12000,InitialDelay=450,ReshowDelay=150,ShowAlways=true};
+    bool recoveryBlocked;
     Control? sourceRow, sourceClusterRow;
     TableLayoutPanel? mainLayout;
     readonly Label modeHint=new(){Dock=DockStyle.Fill,ForeColor=Muted,TextAlign=ContentAlignment.MiddleLeft};
@@ -41,28 +45,35 @@ sealed partial class MainForm:Form{
     public MainForm(){
         Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Text="Gerenciador de Dedicado | 1.0.0";MinimumSize=new Size(850,680);Size=new Size(1100,830);AutoScaleMode=AutoScaleMode.Dpi;StartPosition=FormStartPosition.CenterScreen;BackColor=Bg;ForeColor=Ink;Font=new Font("Segoe UI",11);
-        var main=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=14,BackColor=Bg};
+        var main=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=15,BackColor=Bg};
         mainLayout=main;
-        foreach(var height in new[]{66,35,29,40,40,40,40,40,40})
+        foreach(var height in new[]{78,46,44,46,46,46,46,46,46})
             main.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
         main.RowStyles.Add(new RowStyle(SizeType.Percent,72));
         main.RowStyles.Add(new RowStyle(SizeType.Percent,28));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute,28));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute,76));
         main.RowStyles.Add(new RowStyle(SizeType.Absolute,30));
         Controls.Add(main);
 
         var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2};
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var heading=new Label{Text="Gerenciador de Dedicado",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI Semibold",23),ForeColor=Ink};
+        var heading=new Label{Text="Gerenciador de Dedicado",Dock=DockStyle.Fill,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI Semibold",19),ForeColor=Ink};
+        var subtitle=new Label{Text="DST | Windows | 1.0.0",Dock=DockStyle.Bottom,Height=24,ForeColor=Muted};
+        var brand=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=Padding.Empty};
+        brand.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        brand.RowStyles.Add(new RowStyle(SizeType.Absolute,24));
+        subtitle.Dock=DockStyle.Fill;
+        brand.Controls.Add(heading,0,0);brand.Controls.Add(subtitle,0,1);
         var updater=new Button{Text="Atualizar servidor",Anchor=AnchorStyles.Right};
         var detect=new Button{Text="Detectar dedicado",Anchor=AnchorStyles.Right};
         Style(detect);detect.Click+=async(_,_)=>await AutoLocate();
         Style(updater);
         updater.Click+=async(_,_)=>await UpdateDedicated();
-        top.Controls.Add(heading);
-        var topActions=new FlowLayoutPanel{AutoSize=true,Anchor=AnchorStyles.Right,WrapContents=false};
+        top.Controls.Add(brand);
+        var topActions=new FlowLayoutPanel{AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Anchor=AnchorStyles.Right,WrapContents=false};
         topActions.Controls.Add(detect);topActions.Controls.Add(updater);
         top.Controls.Add(topActions);
         main.Controls.Add(top);
@@ -101,18 +112,37 @@ sealed partial class MainForm:Form{
         grid.Columns[0].FillWeight=180;main.Controls.Add(grid);
         log.Dock=DockStyle.Fill;log.BackColor=PanelColor;log.ForeColor=Ink;log.BorderStyle=BorderStyle.FixedSingle;log.Font=new Font("Consolas",10);main.Controls.Add(log);
         main.Controls.Add(exclusive);
+        main.Controls.Add(recoveryNotice);
         reset.Text="Revisar e aplicar";
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill};actions.Controls.Add(reset);actions.Controls.Add(diagnose);actions.Controls.Add(backups);actions.Controls.Add(website);main.Controls.Add(actions);main.Controls.Add(status);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true};actions.Controls.Add(reset);actions.Controls.Add(diagnose);actions.Controls.Add(backups);actions.Controls.Add(website);main.Controls.Add(actions);
+        actions.SizeChanged+=(_,_)=>{
+            int required=actions.Controls.Cast<Control>().Sum(c=>c.GetPreferredSize(Size.Empty).Width+c.Margin.Horizontal)+8;
+            var height=actions.ClientSize.Width>=required?46:76;
+            if(main.RowStyles[13].Height!=height)main.RowStyles[13].Height=height;
+        };
+        var statusBar=new Panel{Dock=DockStyle.Fill};statusBar.Controls.Add(status);statusBar.Controls.Add(activity);main.Controls.Add(statusBar);
+        grid.AccessibleName="Plano de alterações por mod e shard";log.AccessibleName="Registro da operação";
+        status.AccessibleName="Estado da operação";recoveryNotice.AccessibleName="Estado da recuperação";
+        root.AccessibleDescription="Pasta de origem, usada apenas para copiar mods.";
+        destinationRoot.AccessibleDescription="Pasta que contém o mundo a gerenciar.";
+        install.AccessibleDescription="Pasta de instalação do servidor dedicado, não do cliente.";
+        hints.SetToolTip(analyze,"Somente leitura. Prepare e revise o plano antes de escrever.");
+        hints.SetToolTip(reset,"Exige plano válido, confirmação de exclusividade e duas confirmações.");
+        hints.SetToolTip(detect,"Identifica instalações, mundos e SteamCMD sem modificar arquivos.");
+        hints.SetToolTip(updater,"Atualiza binários pelo SteamCMD, com backup e confirmação.");
+        hints.SetToolTip(backups,"Consulte backups e restaure manutenções interrompidas.");
+        hints.SetToolTip(online,"Envia IDs públicos para obter nomes e imagens; desative para operar sem consulta.");
+        FormClosed+=(_,_)=>hints.Dispose();
         for(var row=0;row<main.Controls.Count;row++)main.SetCellPosition(main.Controls[row],new TableLayoutPanelCellPosition(0,row));
         foreach(var b in new[]{scan,analyze,reset,diagnose,backups,website})Style(b);analyze.BackColor=Accent;analyze.ForeColor=Bg;analyze.FlatAppearance.MouseOverBackColor=Color.FromArgb(163,230,255);analyze.FlatAppearance.MouseDownBackColor=Color.FromArgb(100,190,230);
         root.Text=DefaultClusterRoot();
         destinationRoot.Text=root.Text;
         install.Text="";
-        root.TextChanged+=(_,_)=>{InvalidatePlan();source.Items.Clear();};destinationRoot.TextChanged+=(_,_)=>{InvalidatePlan();target.Items.Clear();};install.TextChanged+=(_,_)=>{exclusive.Checked=false;InvalidatePlan();};source.SelectedIndexChanged+=(_,_)=>InvalidatePlan();target.SelectedIndexChanged+=(_,_)=>{exclusive.Checked=false;InvalidatePlan();};exclusive.CheckedChanged+=(_,_)=>reset.Enabled=!busy&&current!=null&&exclusive.Checked;online.CheckedChanged+=(_,_)=>InvalidatePlan();
+        root.TextChanged+=(_,_)=>{InvalidatePlan();source.Items.Clear();};destinationRoot.TextChanged+=(_,_)=>{InvalidatePlan();target.Items.Clear();};install.TextChanged+=(_,_)=>{exclusive.Checked=false;InvalidatePlan();};source.SelectedIndexChanged+=(_,_)=>InvalidatePlan();target.SelectedIndexChanged+=(_,_)=>{exclusive.Checked=false;InvalidatePlan();};exclusive.CheckedChanged+=(_,_)=>UpdateActions();online.CheckedChanged+=(_,_)=>InvalidatePlan();
         scan.Click+=(_,_)=>{RefreshClusters();};analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();diagnose.Click+=async(_,_)=>await Diagnose();backups.Click+=async(_,_)=>await OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
         FormClosing+=(_,e)=>{if(busy){e.Cancel=true;MessageBox.Show("A operação está em andamento. Aguarde a conclusão.");}};
         mode.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();RefreshMode();RefreshClusters();};
-        RefreshMode();Shown+=async(_,_)=>{RefreshClusters();await AutoLocate(true);};
+        RefreshMode();Shown+=async(_,_)=>{RefreshRecoveryNotice();RefreshClusters();await AutoLocate(true);};
     }
     static void Style(Button b){b.AutoSize=true;b.MinimumSize=new Size(0,32);b.FlatStyle=FlatStyle.Flat;b.BackColor=PanelColor;b.ForeColor=Ink;b.FlatAppearance.BorderColor=Border;b.FlatAppearance.MouseOverBackColor=Raised;b.FlatAppearance.MouseDownBackColor=Color.FromArgb(40,68,109);b.Padding=new Padding(8,0,8,0);}
     Control SelectionRow(string title,Control field,Button? button=null){
@@ -150,12 +180,12 @@ sealed partial class MainForm:Form{
         foreach(var c in candidates)try{if(Engine.Discover(c).Length>0)return c;}catch{}
         return candidates.FirstOrDefault(Directory.Exists)??candidates.FirstOrDefault()??"";
     }
-    void InvalidatePlan(){publishedDependencies.Clear();current=null;reset.Enabled=false;grid.Rows.Clear();status.Text="Analise novamente antes de executar.";}
+    void InvalidatePlan(){publishedDependencies.Clear();current=null;reset.Enabled=false;grid.Rows.Clear();exclusive.Checked=false;status.Text="Analise novamente antes de executar.";}
     bool InPlace=>mode.SelectedIndex!=0;
     void RefreshMode(){
         source.Enabled=!busy&&!InPlace;
         sourceRow!.Visible=sourceClusterRow!.Visible=!InPlace;
-        mainLayout!.RowStyles[3].Height=mainLayout.RowStyles[4].Height=InPlace?0:40;
+        mainLayout!.RowStyles[3].Height=mainLayout.RowStyles[4].Height=InPlace?0:46;
         mode.Enabled=!busy;
         modeHint.Text=mode.SelectedIndex switch{
             0=>"Selecione o mundo de origem e o servidor que receberá os mods.",
@@ -172,11 +202,51 @@ sealed partial class MainForm:Form{
         catch(Exception e){Write(e.Message);}
     }
     void Write(string s){if(InvokeRequired){BeginInvoke(new Action(()=>Write(s)));return;}log.AppendText(DateTime.Now.ToString("HH:mm:ss")+"  "+s+Environment.NewLine);}
+    internal bool VerifyInterfaceLayout(){
+        CreateControl();PerformLayout();
+        foreach(int selectedMode in new[]{0,2}){
+            // Avoid scanning folders in the smoke test: change the visibility of the
+            // source rows directly. Actual mode selection is exercised in local QA.
+            bool copy=selectedMode==0;
+            sourceRow!.Visible=sourceClusterRow!.Visible=copy;
+            mainLayout!.RowStyles[3].Height=mainLayout.RowStyles[4].Height=copy?46:0;
+            foreach(var size in new[]{MinimumSize,new Size(Math.Max(MinimumSize.Width,1100),Math.Max(MinimumSize.Height,830))}){
+                Size=size;PerformLayout();mainLayout.PerformLayout();
+                foreach(var control in new Control[]{reset,diagnose,backups,website,analyze,grid,log,recoveryNotice}){
+                    if(control.Width<=0||control.Height<=0)return false;
+                    for(Control? c=control;c?.Parent!=null;c=c.Parent)
+                        if(!c.Parent.ClientRectangle.Contains(c.Bounds))return false;
+                }
+            }
+        }
+        exclusive.Checked=true;InvalidatePlan();
+        if(exclusive.Checked||reset.Enabled)return false;
+        Busy(true);if(reset.Enabled||analyze.Enabled)return false;
+        // Busy(false) reads recovery records, not required for this pure smoke.
+        return true;
+    }
+    void UpdateActions(){
+        reset.Enabled=!busy&&!recoveryBlocked&&current!=null&&exclusive.Checked;
+    }
+    void RefreshRecoveryNotice(){
+        try{
+            var mods=InterruptedMaintenance.Pending(Recovery.DefaultRoot).Length;
+            var steam=SteamUpdate.Pending(Recovery.DefaultRoot).Length;
+            recoveryBlocked=mods>0||steam>0;
+            recoveryNotice.Text=recoveryBlocked
+                ?(mods>0?"Recuperação de mods pendente: abra Central de backups. ":"")+(steam>0?"SteamCMD pendente: use Atualizar servidor para retomar.":"")
+                :"Nenhuma recuperação pendente detectada. Analise antes de aplicar.";
+            recoveryNotice.ForeColor=recoveryBlocked?Color.FromArgb(255,190,112):Muted;
+        }catch(Exception){
+            recoveryBlocked=true;recoveryNotice.Text="Não foi possível verificar a recuperação. Revise a Central de backups.";recoveryNotice.ForeColor=Color.FromArgb(255,190,112);
+        }
+        UpdateActions();
+    }
     void Busy(bool b){
         busy=b;root.Enabled=destinationRoot.Enabled=install.Enabled=source.Enabled=target.Enabled=scan.Enabled=analyze.Enabled=exclusive.Enabled=online.Enabled=!b;
         // Disable path-picker buttons as well.
         foreach(Control row in Controls[0].Controls)if(row is TableLayoutPanel)row.Enabled=!b;
-        diagnose.Enabled=backups.Enabled=!b;RefreshMode();reset.Enabled=!b&&current!=null&&exclusive.Checked;
+        diagnose.Enabled=backups.Enabled=!b;activity.Visible=b;RefreshMode();if(!b)RefreshRecoveryNotice();else UpdateActions();
     }
     async Task Diagnose(){
         var cluster=target.SelectedItem is Cluster c?c.Path:destinationRoot.Text;
@@ -274,10 +344,11 @@ sealed partial class MainForm:Form{
             var names=await Names(ids,plan,lookup);
             foreach(var s in plan.Shards)foreach(var id in s.Wanted.Concat(s.Old).Distinct().Order()){
                 var action=s.Wanted.Contains(id)?s.Old.Contains(id)?(plan.Edited?"Reinstalar / opções editadas":plan.InPlace?"Reinstalar / manter opções":"Reinstalar / copiar opções"):"Adicionar":"Remover da configuração";
-                grid.Rows.Add(names.GetValueOrDefault(id,"Nome não identificado"),id,s.Name,action);
+                var rowIndex=grid.Rows.Add(names.GetValueOrDefault(id,"Nome não identificado"),id,s.Name,action);
+                grid.Rows[rowIndex].Cells[3].Style.ForeColor=!s.Wanted.Contains(id)?Color.FromArgb(255,190,112):!s.Old.Contains(id)?Color.FromArgb(122,221,176):Ink;
             }
             foreach(var warning in Engine.ModWarnings(plan,publishedDependencies))Write(warning);
-            current=plan;
+            current=plan;UpdateActions();
             status.Text=plan.Ids.Length+" mods únicos ativos • "+(plan.InPlace?plan.Target.Name:plan.Source.Name+" → "+plan.Target.Name);
             Write("Origem: "+plan.Source.Path+" — "+plan.Source.Name);Write("Destino: "+plan.Target.Path+" — "+plan.Target.Name);Write("Instalação: "+plan.Install);
             Write("Simulação concluída. Nenhum arquivo alterado. Revise a lista e confirme instalação exclusiva.");
@@ -303,7 +374,11 @@ sealed partial class MainForm:Form{
         var preview=new PictureBox{Dock=DockStyle.Top,Height=210,BackColor=PanelColor,SizeMode=PictureBoxSizeMode.Zoom};
         var title=new Label{Dock=DockStyle.Top,Height=74,ForeColor=Ink,Text="Selecione um mod para visualizar."};
         var panel=new Panel{Dock=DockStyle.Right,Width=250,Padding=new Padding(8),BackColor=PanelColor};panel.Controls.Add(title);panel.Controls.Add(preview);
-        var controls=new FlowLayoutPanel{Dock=DockStyle.Top,Height=78,Padding=new Padding(4),AutoScroll=true};
+        var controls=new FlowLayoutPanel{Dock=DockStyle.Top,Height=120,Padding=new Padding(4),AutoScroll=true,WrapContents=true};
+        shard.AccessibleName="Shard selecionado";
+        table.AccessibleName="Mods do shard selecionado";
+        input.AccessibleName="Adicionar por ID ou link Workshop";
+        search.AccessibleName="Filtrar catálogo por nome ou ID";
         controls.Controls.AddRange(new Control[]{shard,input,add,toggle,options,search,browseWorkshop,refresh,open});
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=44,FlowDirection=FlowDirection.RightToLeft};actions.Controls.Add(cancel);actions.Controls.Add(ok);
         dialog.Controls.Add(table);dialog.Controls.Add(panel);dialog.Controls.Add(message);dialog.Controls.Add(actions);dialog.Controls.Add(controls);dialog.CancelButton=cancel;
@@ -319,8 +394,13 @@ sealed partial class MainForm:Form{
                 var index=table.Rows.Add(name,id,enabled?"Ativo":"Desativado");if(id==select)table.CurrentCell=table.Rows[index].Cells[0];
             }
         }
+        void UpdateCatalogActions(){
+            bool has=Selected()!=null;
+            add.Enabled=refresh.Enabled=browseWorkshop.Enabled=ok.Enabled=!loading;
+            toggle.Enabled=options.Enabled=has&&!loading;
+        }
         async Task Lookup(){
-            if(loading)return;loading=true;refresh.Enabled=add.Enabled=toggle.Enabled=ok.Enabled=false;
+            if(loading)return;loading=true;UpdateCatalogActions();
             try{
                 var all=texts.Values.SelectMany(t=>Lua.Entries(t).Keys).Distinct().ToArray();
                 message.Text="Consultando dados públicos da Workshop...";
@@ -332,7 +412,7 @@ sealed partial class MainForm:Form{
                 foreach(var (id,url) in updated)previews[id]=url;
                 Populate(Selected());message.Text="Mods listados. Imagens originais aparecem ao selecionar um mod.";
             }catch(Exception e){if(!dialog.IsDisposed)message.Text="Consulta indisponível: "+e.Message;}
-            finally{loading=false;if(!dialog.IsDisposed)refresh.Enabled=add.Enabled=toggle.Enabled=ok.Enabled=true;}
+            finally{loading=false;if(!dialog.IsDisposed)UpdateCatalogActions();}
         }
         async Task ShowPreview(){
             var generation=++previewGeneration;activePreview?.Cancel();activePreview?.Dispose();activePreview=null;ClearImage();var id=Selected();title.Text=id==null?"Selecione um mod":names.GetValueOrDefault(id,id)+"\nWorkshop "+id;
@@ -366,14 +446,14 @@ sealed partial class MainForm:Form{
             }catch(FormatException error){MessageBox.Show(dialog,error.Message,"Configuração inválida");}
         };
         shard.SelectedIndexChanged+=(_,_)=>Populate();search.TextChanged+=(_,_)=>Populate(Selected());
-        table.SelectionChanged+=async(_,_)=>await ShowPreview();
+        table.SelectionChanged+=async(_,_)=>{UpdateCatalogActions();await ShowPreview();};
         refresh.Click+=async(_,_)=>await Lookup();
         browseWorkshop.Click+=async(_,_)=>{
             if(loading)return;
             var selectedShard=Shard();
             var hit=BrowseWorkshop(dialog,search.Text,selectedShard);
             if(hit==null||Shard()!=selectedShard)return;
-            if(hit.PublishedDependencies!=null)publishedDependencies[hit.Id]=hit.PublishedDependencies; Edit(hit.Id,true);await Lookup();
+            if(hit.PublishedDependencies!=null)publishedDependencies[hit.Id]=hit.PublishedDependencies; search.Clear();Edit(hit.Id,true);await Lookup();
         };
         open.Click+=(_,_)=>{var id=Selected();Open(id==null?"https://steamcommunity.com/app/322330/workshop/":"https://steamcommunity.com/sharedfiles/filedetails/?id="+id);};
         Dictionary<string,byte[]>? result=null;
@@ -381,7 +461,7 @@ sealed partial class MainForm:Form{
             if(!candidate.Values.Any(b=>Lua.Active(utf8.GetString(b).TrimStart('\uFEFF')).Count>0)&&MessageBox.Show(dialog,"Todos os mods ficarão desativados. Entidades dependentes de mods podem desaparecer ao iniciar o mundo. Prosseguir apenas para revisão?","Lista vazia",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
             result=candidate;dialog.DialogResult=DialogResult.OK;}catch(Exception e){message.Text=e.Message;}};
         dialog.FormClosing+=(_,e)=>{if(loading){e.Cancel=true;message.Text="A consulta está em andamento.";}else{lifetime.Cancel();activePreview?.Cancel();activePreview?.Dispose();activePreview=null;++previewGeneration;ClearImage();}};
-        Populate();dialog.Shown+=async(_,_)=>await Lookup();
+        Populate();UpdateCatalogActions();dialog.Shown+=async(_,_)=>await Lookup();
         return dialog.ShowDialog(this)==DialogResult.OK?result:null;
     }
     Dictionary<string,byte[]>? EditOverrides(Plan plan){

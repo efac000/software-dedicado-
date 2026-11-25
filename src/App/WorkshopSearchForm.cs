@@ -22,6 +22,10 @@ sealed partial class MainForm{
             loading=true;search.Enabled=next.Enabled=add.Enabled=false;key.Enabled=query.Enabled=false;list.Items.Clear();
             var term=advance?submitted??query.Text:query.Text;
             try{
+                if(string.IsNullOrWhiteSpace(key.Text)){
+                    hint.Text="A pesquisa global exige uma chave de usuário Steam Web API. Sem chave, use Abrir busca oficial e importe o ID ou link no catálogo.";
+                    cursor=null;return;
+                }
                 var page=await WorkshopSearch.Search(key.Text,term,advance?cursor:null,lifetime.Token);
                 if(dialog.IsDisposed||lifetime.IsCancellationRequested)return;
                 list.Items.AddRange(page.Items.Cast<object>().ToArray());cursor=page.NextCursor;submitted=term;
@@ -30,6 +34,9 @@ sealed partial class MainForm{
             finally{loading=false;if(!dialog.IsDisposed&&!lifetime.IsCancellationRequested){search.Enabled=key.Enabled=query.Enabled=true;next.Enabled=cursor!=null;add.Enabled=list.SelectedItem is WorkshopHit;}}
         }
         search.Click+=async(_,_)=>await Load(false);next.Click+=async(_,_)=>await Load(true);
+        query.AccessibleName="Nome do mod na Workshop";key.AccessibleName="Chave de usuário Steam Web API (não armazenada)";
+        list.AccessibleName="Resultados da Workshop para "+shard;
+        dialog.AcceptButton=search;
         browser.Click+=(_,_)=>Open(WorkshopId.SearchUri(query.Text));
         query.TextChanged+=(_,_)=>{cursor=null;next.Enabled=false;list.Items.Clear();};
         key.TextChanged+=(_,_)=>{cursor=null;next.Enabled=false;list.Items.Clear();};
