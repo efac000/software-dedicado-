@@ -64,6 +64,18 @@ sealed partial class MainForm{
     static void DecorateButton(Button b,bool card=false,string? icon=null,bool compact=false){
         if(SystemInformation.HighContrast)return;
         var kind=icon??ButtonIcon(b.Text);
+        // The native flat adapter must not draw a second, rectangular outline.
+        b.FlatAppearance.BorderSize=0;
+        b.UseVisualStyleBackColor=false;
+        void UpdateClip(){
+            var previous=b.Region;
+            if(b.Width<4||b.Height<4||SystemInformation.HighContrast){b.Region=null;previous?.Dispose();return;}
+            int radius=Math.Max(1,b.LogicalToDeviceUnits(card?10:6));
+            using var outline=Rounded(new Rectangle(0,0,b.Width,b.Height),radius);
+            b.Region=new Region(outline);previous?.Dispose();
+        }
+        b.SizeChanged+=(_,_)=>UpdateClip();b.DpiChangedAfterParent+=(_,_)=>UpdateClip();
+        b.HandleCreated+=(_,_)=>UpdateClip();UpdateClip();
         // All buttons receive consistent disabled and focus treatment.
         bool hover=false,down=false;
         float blend=0;
@@ -84,12 +96,13 @@ sealed partial class MainForm{
         b.VisibleChanged+=(_,_)=>{if(!b.Visible){motion.Stop();hover=down=false;blend=0;}};b.MouseDown+=(_,_)=>{down=true;b.Invalidate();};b.MouseUp+=(_,_)=>{down=false;b.Invalidate();};
         b.GotFocus+=(_,_)=>b.Invalidate();b.LostFocus+=(_,_)=>b.Invalidate();b.EnabledChanged+=(_,_)=>{Animate();b.Invalidate();};
         b.Paint+=(_,e)=>{
-            var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;
+            var g=e.Graphics;var graphicsState=g.Save();g.SmoothingMode=SmoothingMode.AntiAlias;
             int scale(int v)=>Math.Max(1,b.LogicalToDeviceUnits(v));
-            var r=new Rectangle(1,1,b.Width-3,b.Height-3);if(r.Width<4||r.Height<4)return;
+            var r=new Rectangle(1,1,b.Width-3,b.Height-3);if(r.Width<4||r.Height<4){g.Restore(graphicsState);return;}
             Color Mix(Color a,Color c,float t)=>Color.FromArgb((int)(a.R+(c.R-a.R)*t),(int)(a.G+(c.G-a.G)*t),(int)(a.B+(c.B-a.B)*t));
             var fill=!b.Enabled?PanelColor:down?SelectionColor:b.BackColor==Accent?Accent:Mix(b.BackColor,Raised,blend);
             var fg=b.Enabled?b.ForeColor:Muted;
+            // Clear the old flat fill, including the antialiased edge, using the actual parent color.
             using var background=new SolidBrush(b.Parent?.BackColor??Bg);g.FillRectangle(background,b.ClientRectangle);
             using var shape=Rounded(r,scale(card?10:6));using var brush=new SolidBrush(fill);g.FillPath(brush,shape);
             using var edge=new Pen(b.Focused?Accent:Border,b.Focused?2:1);g.DrawPath(edge,shape);
@@ -113,6 +126,7 @@ sealed partial class MainForm{
                     TextRenderer.DrawText(g,b.Text,b.Font,new Rectangle(left,0,Math.Max(1,b.Width-left-scale(6)),b.Height),fg,TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|(b.Focused?TextFormatFlags.Default:TextFormatFlags.HidePrefix));
                 }
             }
+            g.Restore(graphicsState);
         };
     }
     void BuildShell(){

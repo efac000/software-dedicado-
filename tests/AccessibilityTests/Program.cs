@@ -33,6 +33,13 @@ static class AccessibilityTests{
     static double Contrast(Color fg,Color bg){
         var a=Luminance(fg);var b=Luminance(bg);return (Math.Max(a,b)+.05)/(Math.Min(a,b)+.05);
     }
+    static void VerifyRounded(Button button){
+        if(SystemInformation.HighContrast)return;
+        Assert(button.FlatAppearance.BorderSize==0,"Native square border: "+button.Text);
+        var region=button.Region;Assert(region!=null,"Missing rounded region: "+button.Text);
+        Assert(!region!.IsVisible(0,0)&&!region.IsVisible(button.Width-1,0)&&!region.IsVisible(0,button.Height-1)&&!region.IsVisible(button.Width-1,button.Height-1),"Square corner: "+button.Text);
+        Assert(region.IsVisible(button.Width/2,button.Height/2),"Button center clipped: "+button.Text);
+    }
     static void Reachable(Panel host,Control c){
         Assert(c.Visible&&c.Width>0&&c.Height>0,"Missing control "+c.Name+" "+c.Text);
         host.ScrollControlIntoView(c);Application.DoEvents();
@@ -89,7 +96,8 @@ static class AccessibilityTests{
                 foreach(var size in new[]{new Size(1536,864),new Size(1100,830),new Size(850,680),new Size(683,512),new Size(640,420)}){
                     form.Size=size;form.PerformLayout();Application.DoEvents();
                     if(form.DeviceDpi==96&&size.Width>=850&&size.Height>=680)Assert(!host.HorizontalScroll.Visible&&!host.VerticalScroll.Visible,"Unnecessary scrollbars in normal window");
-                    foreach(var b in buttons)Reachable(host,b);
+                    foreach(var b in buttons){Reachable(host,b);VerifyRounded(b);}
+                    foreach(var b in Field<List<Button>>(form,"navButtons"))VerifyRounded(b);
                     var feedback=buttons.Single(b=>b.Text.Contains("Feedbac"));
                     feedback.Focus();Application.DoEvents();
                     Assert(feedback.Focused,"Feedback not keyboard focusable");
@@ -100,7 +108,7 @@ static class AccessibilityTests{
                 var visited=new HashSet<Button>();
                 for(int i=0;i<36;i++){form.SelectNextControl(form.ActiveControl,true,true,true,true);Application.DoEvents();if(form.ActiveControl is Button b)visited.Add(b);}
                 Assert(visited.Count==22&&buttons.All(visited.Contains),"Tab traversal incomplete "+visited.Count);
-                Console.WriteLine("KEYBOARD_TAB_PASS "+theme);Capture(form,"home-"+theme);
+                Console.WriteLine("KEYBOARD_TAB_PASS "+theme);Console.WriteLine("ROUNDED_CORNER_REGION_PASS "+theme);Capture(form,"home-"+theme);
                 if(!SystemInformation.HighContrast){
                     var prior=form.BackColor;
                     Call(form,"ShowPreferences");Application.DoEvents();
@@ -136,7 +144,7 @@ static class AccessibilityTests{
                     var add=Desc(catalog).OfType<Button>().Single(c=>c.Text=="Adicionar / ativar");
                     WaitFor(()=>add.Enabled,"Offline catalog lookup did not finish");idField.Text="123456789";add.PerformClick();
                     var review=Desc(catalog).OfType<Button>().Single(c=>c.Text=="Revisar plano");
-                    WaitFor(()=>review.Enabled,"Offline catalog add did not finish");Capture(form,"catalog-"+theme);review.PerformClick();
+                    WaitFor(()=>review.Enabled,"Offline catalog add did not finish");foreach(var b in Desc(catalog).OfType<Button>())VerifyRounded(b);Capture(form,"catalog-"+theme);review.PerformClick();
                     WaitFor(()=>editing.IsCompleted,"Catalog review did not finish");
                     Assert(editing.IsCompletedSuccessfully&&editing.Result!=null,"Catalog result missing");
                     Assert(Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result!["Caves"])).ContainsKey("123456789")&&Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result["Master"])).Count==0,"Catalog changed wrong shard");
@@ -146,7 +154,7 @@ static class AccessibilityTests{
                     Assert(!diag.IsCompleted,"Diagnostic ended before display: "+Field<TextBox>(form,"log").Text);
                     var diagnosticPage=Field<Panel>(form,"taskPageHost");
                     Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing: "+Field<TextBox>(form,"log").Text);
-                    Assert(Desc(diagnosticPage).OfType<Label>().Any(l=>l.Text=="Pesquisar:"),"Diagnostic search label missing");Capture(form,"diagnostic-"+theme);
+                    Assert(Desc(diagnosticPage).OfType<Label>().Any(l=>l.Text=="Pesquisar:"),"Diagnostic search label missing");foreach(var b in Desc(diagnosticPage).OfType<Button>())VerifyRounded(b);Capture(form,"diagnostic-"+theme);
                     Desc(diagnosticPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar do diagnóstico").PerformClick();
                     WaitFor(()=>diag.IsCompleted,"Diagnostic did not return");
                     Assert(diag.IsCompletedSuccessfully&&mainHost.Visible,"Diagnostic did not restore workspace");
@@ -156,7 +164,7 @@ static class AccessibilityTests{
                     WaitFor(()=>Field<Panel>(form,"taskPageHost") is Panel page&&page.Name=="task-backups"||backupTask.IsCompleted,"Backups did not open");
                     Assert(!backupTask.IsCompleted,"Backup page ended before display");
                     var backupPage=Field<Panel>(form,"taskPageHost");
-                    Assert(Desc(backupPage).OfType<Label>().Any(l=>l.Text.Contains("Nenhum backup encontrado")),"Missing empty backup state");Capture(form,"backups-"+theme);
+                    Assert(Desc(backupPage).OfType<Label>().Any(l=>l.Text.Contains("Nenhum backup encontrado")),"Missing empty backup state");foreach(var b in Desc(backupPage).OfType<Button>())VerifyRounded(b);Capture(form,"backups-"+theme);
                     Desc(backupPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar dos backups").PerformClick();
                     WaitFor(()=>backupTask.IsCompleted,"Backups did not return");
                     Assert(backupTask.IsCompletedSuccessfully&&mainHost.Visible,"Backups did not restore workspace");
