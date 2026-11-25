@@ -8,7 +8,7 @@ sealed partial class MainForm{
         var panel=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(12)};
         var hint=new Label{AutoSize=true,MaximumSize=new Size(690,0),Text="Uma operação anterior não foi finalizada. Novas manutenções ficam bloqueadas. Selecione o backup original. A recuperação restaura apenas arquivos e caches afetados, não os saves. Desligue servidor, jogo e reinícios automáticos. Arquivos modificados fora do plano bloqueiam a operação.\nDestino selecionado: "+chosen.Path};
         var list=new ListBox{Width=690,Height=130,BackColor=PanelColor,ForeColor=Ink,HorizontalScrollbar=true};list.Items.AddRange(pending.Cast<object>().ToArray());
-        var phrase="RECUPERAR Cluster_"+chosen.Number;
+        var phrase="RECUPERAR "+chosen.FolderName;
         var label=new Label{AutoSize=true,Text="Digite exatamente: "+phrase};
         var input=new TextBox{Width=380,BackColor=PanelColor,ForeColor=Ink};
         var exclusiveInstall=new CheckBox{AutoSize=true,Text="Confirmo instalação exclusiva e servidor/reinício automático desligados."};

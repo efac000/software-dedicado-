@@ -10,11 +10,27 @@ static class SteamUpdateTests {
             var conf=Path.Combine(root,"Klei","DST");var cluster=Path.Combine(conf,"Cluster_1");Directory.CreateDirectory(Path.Combine(cluster,"Master"));File.WriteAllText(Path.Combine(cluster,"cluster.ini"),"cluster_name = Teste");File.WriteAllText(Path.Combine(cluster,"Master","server.ini"),"[SHARD]");
             var target=Engine.Load(conf,"1");SteamUpdate.Check(cli,target,install);
             var args=SteamUpdate.Arguments(install,true);
-            Check(args.SequenceEqual(new[]{"+force_install_dir",install,"+login","anonymous","+app_update","343050","validate","+quit"}),"Argumentos SteamCMD inválidos");
+            Check(args.SequenceEqual(new[]{"+force_install_dir",install,"+login","anonymous","+app_info_update","1","+app_update","343050","validate","+quit"}),"Argumentos SteamCMD inválidos");
             Check(!SteamUpdate.Arguments(install,false).Contains("validate"),"Validação não solicitada");
             Check(SteamUpdate.Confirmed(new[]{"Success! App '343050' fully installed."}),"Sucesso não reconhecido");
             Check(!SteamUpdate.Confirmed(new[]{"Success! App '322330' fully installed."}),"App incorreto reconhecido");
             Check(!SteamUpdate.Confirmed(new[]{"Success! App '343050' fully installed.","ERROR! Failed to install app '343050'"}),"Falha ignorada");
+            Check(!SteamUpdate.Confirmed(new[]{"Timed out waiting for update to start, bailing.","Success! App '343050' fully installed."}),"Timeout ignorado pela confirmação");
+            int attempts=0;
+            SteamUpdate.ConfirmUpdate(false,(verify,label)=>{
+                attempts++;
+                if(attempts==1){Check(!verify&&label=="steamcmd","Primeira tentativa inesperada");return (0,new[]{"Timed out waiting for update to start, bailing.","Success! App '343050' fully installed."},Array.Empty<string>());}
+                Check(verify&&label=="steamcmd-validate-retry","Nova validação não isolada");
+                return (0,new[]{"Success! App '343050' fully installed."},Array.Empty<string>());
+            });
+            Check(attempts==2,"Timeout contraditório aceito sem nova validação");
+            attempts=0;
+            bool rejected=false;
+            try{SteamUpdate.ConfirmUpdate(false,(_,_)=>{attempts++;return (0,new[]{"Success! App '343050' fully installed."},new[]{"Timed out waiting for update to start"});});}catch(IOException){rejected=true;}
+            Check(rejected&&attempts==2,"Timeout persistente aceito ou repetição ilimitada");
+            attempts=0;rejected=false;
+            try{SteamUpdate.ConfirmUpdate(false,(_,_)=>{attempts++;return (0,new[]{"Success! App '343050' fully installed."},new[]{"ERROR! Failed to install app '343050'"});});}catch(IOException){rejected=true;}
+            Check(rejected&&attempts==1,"Erro definitivo ignorado ou repetido");
             var setup=Path.Combine(install,"mods","dedicated_server_mods_setup.lua");
             var settings=Path.Combine(install,"mods","modsettings.lua");File.WriteAllText(setup,"ServerModSetup(\"42\")");
             var drive=new DriveInfo(Path.GetPathRoot(install)!);
@@ -25,6 +41,17 @@ static class SteamUpdateTests {
                 bool failed=false;
                 try{SteamUpdate.Run(cli,target,install,false,Path.Combine(root,"backup"),()=>{},(_,_,_,_)=>{File.WriteAllText(setup,"corrompido");throw new IOException("falha simulada");},_=>{});}catch(IOException){failed=true;}
                 Check(failed&&File.ReadAllText(setup)=="ServerModSetup(\"42\")","Falha não preservou configuração");
+                var backupRoot=Path.Combine(root,"backup");
+                Check(SteamUpdate.Pending(backupRoot).Length==1,"Falha não registrou recuperação");
+                File.AppendAllText(setup," -- mudança externa");
+                bool invoked=false;
+                try{SteamUpdate.Run(cli,target,install,false,backupRoot,()=>{},(_,_,_,_)=>invoked=true,_=>{});}
+                catch(IOException){}
+                Check(!invoked&&File.ReadAllText(setup).EndsWith("mudança externa"),"Retomada sobrescreveu alteração externa");
+                File.WriteAllText(setup,"ServerModSetup(\"42\")");
+                SteamUpdate.Run(cli,target,install,false,backupRoot,()=>{},(_,_,verify,_)=>{Check(verify,"Retomada sem validação");invoked=true;},_=>{});
+                Check(invoked&&SteamUpdate.Pending(backupRoot).Length==0,"Retomada não encerrou recuperação");
+
             }else Console.WriteLine("SteamCMD: teste de transação ignorado por espaço em disco do runner.");
         }finally{if(Directory.Exists(root))Directory.Delete(root,true);}
     }

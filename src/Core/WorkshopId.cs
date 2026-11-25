@@ -1,6 +1,9 @@
 using System.Text.RegularExpressions;
 namespace Dedicado;
 public static class WorkshopId {
+    public static string SearchUri(string query)=>
+        "https://steamcommunity.com/workshop/browse/?appid=322330&searchtext="+Uri.EscapeDataString(query.Trim());
+
     public static bool TryParse(string input,out string id){
         id="";
         var value=input.Trim();

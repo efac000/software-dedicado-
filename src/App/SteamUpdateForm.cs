@@ -26,10 +26,14 @@ sealed partial class MainForm {
         catch(Exception e){Write("Atualização bloqueada: "+e.Message);return;}
         using var dialog=new Form{Text="Atualização do dedicado via SteamCMD",Size=new Size(720,450),MinimumSize=new Size(620,400),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
         var body=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(12)};
-        var phrase="ATUALIZAR Cluster_"+chosen.Number;
+        bool resuming;
+        try{resuming=SteamUpdate.Pending(Recovery.DefaultRoot).Length>0;}
+        catch(IOException error){Write(error.Message);return;}
+        var phrase=(resuming?"RETOMAR ":"ATUALIZAR ")+chosen.FolderName;
         var info=new Label{AutoSize=true,MaximumSize=new Size(640,0),Text="Destino: "+installation+"\nCluster: "+chosen.Path+"\nSteamCMD: "+exe+"\n\nA operação atualiza o servidor (app 343050), não os mods. Faz backup do mundo e dos arquivos de configuração dos mods. Não reverte binários após falha. Reserve espaço para vários GiB e feche o servidor e reinícios automáticos. Instalações gerenciadas pela Steam não são suportadas neste modo."};
+        if(resuming)info.Text="Atualização anterior pendente. A retomada valida os binários e exige que a configuração atual corresponda ao backup.\n\n"+info.Text;
         var exclusiveInstall=new CheckBox{AutoSize=true,Text="Confirmo instalação exclusiva, UGC padrão e ausência de reinício automático."};
-        var validate=new CheckBox{AutoSize=true,Text="Também validar arquivos do dedicado (pode demorar e substituir arquivos)."};
+        var validate=new CheckBox{AutoSize=true,Checked=resuming,Enabled=!resuming,Text="Também validar arquivos do dedicado (pode demorar e substituir arquivos)."};
         var label=new Label{AutoSize=true,Text="Digite: "+phrase};
         var input=new TextBox{Width=410,BackColor=PanelColor,ForeColor=Ink};
         var update=new Button{Text="Confirmar atualização",Enabled=false,DialogResult=DialogResult.OK};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(update);Style(cancel);

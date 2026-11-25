@@ -21,6 +21,16 @@ static class InterruptedTests{
             File.WriteAllText(overrides,"return {}");Reject(()=>InterruptedMaintenance.RecoverCore(backup,backupRoot,target,install,()=>{},_=>{}));
             Check(Directory.Exists(newCache)&&Directory.Exists(Path.Combine(q,"0")),"Recuperação alterou arquivos diante de divergência");
             File.WriteAllBytes(overrides,changed);
+            // A missing quarantine slot plus a replacement directory is not a restored cache.
+            var slot=Path.Combine(q,"0");var hidden=Path.Combine(q,"original-for-test");
+            Directory.Move(slot,hidden);
+            Directory.CreateDirectory(oldCache);File.WriteAllText(Path.Combine(oldCache,"old"),"impostor");
+            Reject(()=>InterruptedMaintenance.RecoverCore(backup,backupRoot,target,install,()=>{},_=>{}));
+            Check(File.ReadAllText(Path.Combine(oldCache,"old"))=="impostor"&&File.ReadAllBytes(overrides).SequenceEqual(changed),"Cache substituto aceito ou arquivos alterados");
+            Directory.Delete(oldCache,true);Directory.Move(hidden,slot);
+            File.WriteAllText(Path.Combine(slot,"old"),"tampered");
+            Reject(()=>InterruptedMaintenance.RecoverCore(backup,backupRoot,target,install,()=>{},_=>{}));
+            File.WriteAllText(Path.Combine(slot,"old"),"old");
             InterruptedMaintenance.RecoverCore(backup,backupRoot,target,install,()=>{},_=>{});
             Check(File.ReadAllBytes(overrides).SequenceEqual(original)&&File.ReadAllText(setup).Contains("42"),"Configurações não restauradas");
             Check(File.Exists(Path.Combine(oldCache,"old"))&&!Directory.Exists(newCache),"Caches não recuperados");
