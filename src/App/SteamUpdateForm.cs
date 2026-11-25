@@ -38,7 +38,7 @@ sealed partial class MainForm {
         var validate=new CheckBox{AutoSize=true,Checked=resuming,Enabled=!resuming,Text="Também validar arquivos do dedicado (pode demorar e substituir arquivos)."};
         var label=new Label{AutoSize=true,Text="Digite: "+phrase};
         var input=new TextBox{Width=410,BackColor=PanelColor,ForeColor=Ink,AccessibleName="Digite a frase de confirmação",AccessibleDescription=phrase};
-        var update=new Button{Text="Confirmar atualização",Enabled=false,DialogResult=DialogResult.OK};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(update);Style(cancel);
+        var update=new ModernButton{Text="Confirmar atualização",Enabled=false,DialogResult=DialogResult.OK};var cancel=new ModernButton{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(update);Style(cancel);
         void Refresh()=>update.Enabled=exclusiveInstall.Checked&&input.Text==phrase;
         exclusiveInstall.CheckedChanged+=(_,_)=>Refresh();input.TextChanged+=(_,_)=>Refresh();
         body.Controls.Add(info);body.Controls.Add(exclusiveInstall);body.Controls.Add(validate);body.Controls.Add(label);body.Controls.Add(input);body.Controls.Add(update);body.Controls.Add(cancel);dialog.Controls.Add(body);dialog.CancelButton=cancel;

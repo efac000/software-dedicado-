@@ -36,9 +36,23 @@ static class AccessibilityTests{
     static void VerifyRounded(Button button){
         if(SystemInformation.HighContrast)return;
         Assert(button.FlatAppearance.BorderSize==0,"Native square border: "+button.Text);
-        var region=button.Region;Assert(region!=null,"Missing rounded region: "+button.Text);
-        Assert(!region!.IsVisible(0,0)&&!region.IsVisible(button.Width-1,0)&&!region.IsVisible(0,button.Height-1)&&!region.IsVisible(button.Width-1,button.Height-1),"Square corner: "+button.Text);
-        Assert(region.IsVisible(button.Width/2,button.Height/2),"Button center clipped: "+button.Text);
+        Assert(button.GetType().Name=="ModernButton","Native paint adapter still present: "+button.Text);
+        Assert(button.Region==null,"Native clip may leave unpainted pixels: "+button.Text);
+        using var image=new Bitmap(button.Width,button.Height);
+        button.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));
+        var expected=button.Parent!.BackColor.ToArgb();
+        // A one-pixel perimeter must be entirely identical to the surrounding surface.
+        // This detects faint rectangular halos that a geometric region test cannot detect.
+        for(int x=0;x<image.Width;x++){
+            Assert(image.GetPixel(x,0).ToArgb()==expected,"Top halo: "+button.Text+" at "+x);
+            Assert(image.GetPixel(x,image.Height-1).ToArgb()==expected,"Bottom halo: "+button.Text+" at "+x);
+        }
+        for(int y=0;y<image.Height;y++){
+            Assert(image.GetPixel(0,y).ToArgb()==expected,"Left halo: "+button.Text+" at "+y);
+            Assert(image.GetPixel(image.Width-1,y).ToArgb()==expected,"Right halo: "+button.Text+" at "+y);
+        }
+        int inset=Math.Max(1,button.LogicalToDeviceUnits(3));
+        Assert(image.GetPixel(image.Width/2,inset).ToArgb()!=expected,"Missing rounded border: "+button.Text);
     }
     static void Reachable(Panel host,Control c){
         Assert(c.Visible&&c.Width>0&&c.Height>0,"Missing control "+c.Name+" "+c.Text);
@@ -108,7 +122,7 @@ static class AccessibilityTests{
                 var visited=new HashSet<Button>();
                 for(int i=0;i<36;i++){form.SelectNextControl(form.ActiveControl,true,true,true,true);Application.DoEvents();if(form.ActiveControl is Button b)visited.Add(b);}
                 Assert(visited.Count==22&&buttons.All(visited.Contains),"Tab traversal incomplete "+visited.Count);
-                Console.WriteLine("KEYBOARD_TAB_PASS "+theme);Console.WriteLine("ROUNDED_CORNER_REGION_PASS "+theme);Capture(form,"home-"+theme);
+                Console.WriteLine("KEYBOARD_TAB_PASS "+theme);Console.WriteLine("ROUNDED_PIXEL_PERIMETER_PASS "+theme);Capture(form,"home-"+theme);
                 if(!SystemInformation.HighContrast){
                     var prior=form.BackColor;
                     Call(form,"ShowPreferences");Application.DoEvents();

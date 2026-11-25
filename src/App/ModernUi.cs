@@ -61,21 +61,31 @@ sealed partial class MainForm{
         if(d<=0){path.AddRectangle(r);return path;}
         path.AddArc(r.X,r.Y,d,d,180,90);path.AddArc(r.Right-d,r.Y,d,d,270,90);path.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);path.AddArc(r.X,r.Bottom-d,d,d,90,90);path.CloseFigure();return path;
     }
+    // Preserve Button keyboard, dialog and accessibility behavior, but own the entire paint pass.
+    sealed class ModernButton:Button{
+        public Action<PaintEventArgs>? RenderSurface;
+        public ModernButton(){SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);}
+        protected override void OnPaintBackground(PaintEventArgs e){
+            if(RenderSurface==null||SystemInformation.HighContrast){base.OnPaintBackground(e);return;}
+            using var fill=new SolidBrush(Parent?.BackColor??Bg);e.Graphics.FillRectangle(fill,ClientRectangle);
+        }
+        protected override void OnPaint(PaintEventArgs e){
+            if(RenderSurface==null||SystemInformation.HighContrast){base.OnPaint(e);return;}
+            RenderSurface(e);
+        }
+        protected override void OnParentChanged(EventArgs e){base.OnParentChanged(e);Invalidate();}
+        protected override void OnDpiChangedAfterParent(EventArgs e){base.OnDpiChangedAfterParent(e);Invalidate();}
+    }
     static void DecorateButton(Button b,bool card=false,string? icon=null,bool compact=false){
         if(SystemInformation.HighContrast)return;
         var kind=icon??ButtonIcon(b.Text);
         // The native flat adapter must not draw a second, rectangular outline.
         b.FlatAppearance.BorderSize=0;
         b.UseVisualStyleBackColor=false;
-        void UpdateClip(){
-            var previous=b.Region;
-            if(b.Width<4||b.Height<4||SystemInformation.HighContrast){b.Region=null;previous?.Dispose();return;}
-            int radius=Math.Max(1,b.LogicalToDeviceUnits(card?10:6));
-            using var outline=Rounded(new Rectangle(0,0,b.Width,b.Height),radius);
-            b.Region=new Region(outline);previous?.Dispose();
-        }
-        b.SizeChanged+=(_,_)=>UpdateClip();b.DpiChangedAfterParent+=(_,_)=>UpdateClip();
-        b.HandleCreated+=(_,_)=>UpdateClip();UpdateClip();
+        if(b is not ModernButton surface)throw new InvalidOperationException("Botão moderno sem renderizador próprio.");
+        // Do not clip the HWND: the full client rectangle must be painted, including the corners.
+        // A Region can leave stale edge pixels in WM_PRINT / DrawToBitmap and at fractional DPI.
+        b.Region=null;
         // All buttons receive consistent disabled and focus treatment.
         bool hover=false,down=false;
         float blend=0;
@@ -95,17 +105,19 @@ sealed partial class MainForm{
         b.MouseEnter+=(_,_)=>{hover=true;Animate();};b.MouseLeave+=(_,_)=>{hover=false;down=false;Animate();};
         b.VisibleChanged+=(_,_)=>{if(!b.Visible){motion.Stop();hover=down=false;blend=0;}};b.MouseDown+=(_,_)=>{down=true;b.Invalidate();};b.MouseUp+=(_,_)=>{down=false;b.Invalidate();};
         b.GotFocus+=(_,_)=>b.Invalidate();b.LostFocus+=(_,_)=>b.Invalidate();b.EnabledChanged+=(_,_)=>{Animate();b.Invalidate();};
-        b.Paint+=(_,e)=>{
+        surface.RenderSurface=e=>{
             var g=e.Graphics;var graphicsState=g.Save();g.SmoothingMode=SmoothingMode.AntiAlias;
             int scale(int v)=>Math.Max(1,b.LogicalToDeviceUnits(v));
-            var r=new Rectangle(1,1,b.Width-3,b.Height-3);if(r.Width<4||r.Height<4){g.Restore(graphicsState);return;}
+            int inset=scale(3);
+            var r=new Rectangle(inset,inset,b.Width-2*inset-1,b.Height-2*inset-1);
+            // Paint every pixel with the exact parent color before drawing the single rounded surface.
+            using(var background=new SolidBrush(b.Parent?.BackColor??Bg))g.FillRectangle(background,b.ClientRectangle);
+            if(r.Width<4||r.Height<4){g.Restore(graphicsState);return;}
             Color Mix(Color a,Color c,float t)=>Color.FromArgb((int)(a.R+(c.R-a.R)*t),(int)(a.G+(c.G-a.G)*t),(int)(a.B+(c.B-a.B)*t));
             var fill=!b.Enabled?PanelColor:down?SelectionColor:b.BackColor==Accent?Accent:Mix(b.BackColor,Raised,blend);
             var fg=b.Enabled?b.ForeColor:Muted;
-            // Clear the old flat fill, including the antialiased edge, using the actual parent color.
-            using var background=new SolidBrush(b.Parent?.BackColor??Bg);g.FillRectangle(background,b.ClientRectangle);
             using var shape=Rounded(r,scale(card?10:6));using var brush=new SolidBrush(fill);g.FillPath(brush,shape);
-            using var edge=new Pen(b.Focused?Accent:Border,b.Focused?2:1);g.DrawPath(edge,shape);
+            using var edge=new Pen(b.Focused?Accent:Border,b.Focused?scale(2):scale(1));g.DrawPath(edge,shape);
             var text=b.Text.Replace("&","");
             int iconSize=scale(card?28:17);
             if(card){
@@ -137,7 +149,7 @@ sealed partial class MainForm{
         var stack=new FlowLayoutPanel{Dock=DockStyle.Top,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,BackColor=PanelColor};
         nav.Controls.Add(stack);
         void Add(string name,string glyph,string section,Action action){
-            var b=new Button{Text=name,AccessibleName=name,AccessibleDescription="Navegação: "+name,Height=LogicalToDeviceUnits(37),Width=LogicalToDeviceUnits(168),AutoSize=false,Margin=new Padding(2,2,2,2),TextAlign=ContentAlignment.MiddleLeft,Tag=section,FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink};
+            var b=new ModernButton{Text=name,AccessibleName=name,AccessibleDescription="Navegação: "+name,Height=LogicalToDeviceUnits(37),Width=LogicalToDeviceUnits(168),AutoSize=false,Margin=new Padding(2,2,2,2),TextAlign=ContentAlignment.MiddleLeft,Tag=section,FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink};
             b.FlatAppearance.BorderColor=Border;
             DecorateButton(b,false,glyph,true);b.Click+=(_,_)=>{if(busy)return;action();};
             stack.Controls.Add(b);navButtons.Add(b);hints.SetToolTip(b,name);
@@ -202,7 +214,7 @@ sealed partial class MainForm{
                 FormBorderStyle=FormBorderStyle.None;Padding=new Padding(12,8,12,12);
                 var bar=new Panel{Dock=DockStyle.Top,Height=LogicalToDeviceUnits(45),BackColor=PanelColor};
                 var title=new Label{Text=Text,Dock=DockStyle.Fill,Font=new Font("Segoe UI Semibold",12),ForeColor=Ink,TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true,Padding=new Padding(9,0,0,0)};
-                var close=new Button{Text="×",AccessibleName="Fechar janela",Dock=DockStyle.Right,Width=LogicalToDeviceUnits(46),FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink,DialogResult=DialogResult.Cancel};
+                var close=new ModernButton{Text="×",AccessibleName="Fechar janela",Dock=DockStyle.Right,Width=LogicalToDeviceUnits(46),FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink,DialogResult=DialogResult.Cancel};
                 close.FlatAppearance.BorderColor=Border;DecorateButton(close,false,"close",true);
                 close.Click+=(_,_)=>{DialogResult=DialogResult.Cancel;Close();};
                 bar.Controls.Add(title);bar.Controls.Add(close);
@@ -257,7 +269,7 @@ sealed partial class MainForm{
             var created=new List<Button>();
             foreach(var (label,result) in choices){
                 var caption=title=="Atualizações"?(result==DialogResult.Yes?"Abrir site":"Fechar"):label;
-                var button=new Button{Text=caption,DialogResult=result};Style(button);created.Add(button);
+                var button=new ModernButton{Text=caption,DialogResult=result};Style(button);created.Add(button);
             }
             foreach(var b in created.AsEnumerable().Reverse())row.Controls.Add(b);
             var defaultIndex=Math.Clamp((int)defaultButton/256,0,created.Count-1);

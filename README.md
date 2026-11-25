@@ -103,3 +103,5 @@ A área de tarefas exibe avisos de estado sem janelas extras, e a tela inicial m
 O CI gera capturas renderizadas da interface WinForms com um mundo descartável (temas claro e escuro, início, preferências, atividade, guia, catálogo, diagnóstico e backups), no artefato `UI-review-fixture`. Não são imagens de um servidor real; revisão visual humana ainda é necessária antes de atualizar as capturas oficiais.
 
 Correção visual: os botões e cards compartilhados eliminam a borda plana nativa e usam região arredondada recalculada ao redimensionar ou alterar DPI. Os testes conferem ausência da borda retangular, exclusão dos quatro cantos e preservação da área central, nos temas claro/escuro e nas páginas internas.
+
+Acabamento visual: `ModernButton` é um Button com pintura integral própria. A superfície nativa e o recorte HWND foram substituídos por preenchimento do fundo do pai e uma única forma arredondada antialias. O teste de regressão compara todos os pixels do perímetro com a cor do contêiner, não apenas a geometria.

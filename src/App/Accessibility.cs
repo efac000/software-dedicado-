@@ -77,9 +77,9 @@ sealed partial class MainForm{
             ("&Sugerir melhoria",FeedbackBase+"/new?template=suggestion.yml"),
             ("Consultar &relatos existentes",FeedbackBase),
             ("&Guia e documentação","https://efac000.github.io/software-dedicado-/#uso")}){
-            var b=new Button{Text=option.Text};Style(b);b.Click+=(_,_)=>Open(option.Url);body.Controls.Add(b);
+            var b=new ModernButton{Text=option.Text};Style(b);b.Click+=(_,_)=>Open(option.Url);body.Controls.Add(b);
         }
-        var close=new Button{Text="Fechar",DialogResult=DialogResult.Cancel};Style(close);body.Controls.Add(close);
+        var close=new ModernButton{Text="Fechar",DialogResult=DialogResult.Cancel};Style(close);body.Controls.Add(close);
         dialog.Controls.Add(body);dialog.CancelButton=close;
         PrepareAccessibility(dialog);dialog.ShowDialog(this);
     }

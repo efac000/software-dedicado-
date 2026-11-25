@@ -104,17 +104,17 @@ sealed partial class MainForm{
         var theme=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Top,AccessibleName="Tema da interface",BackColor=PanelColor,ForeColor=Ink};
         theme.Items.AddRange(new object[]{"Automático (Windows)","Escuro","Claro"});theme.SelectedIndex=CurrentTheme() switch{"dark"=>1,"light"=>2,_=>0};
         var auto=new CheckBox{Text="Verificar builds ao abrir (consulta ao GitHub)",Checked=checkUpdates,AutoSize=true,AccessibleDescription="Não baixa nem instala automaticamente."};
-        var save=new Button{Text="Salvar caminhos selecionados"};Style(save);
-        var forget=new Button{Text="Esquecer caminhos salvos"};Style(forget);
+        var save=new ModernButton{Text="Salvar caminhos selecionados"};Style(save);
+        var forget=new ModernButton{Text="Esquecer caminhos salvos"};Style(forget);
         var message=new Label{Dock=DockStyle.Fill,ForeColor=Muted,AccessibleName="Estado das preferências",Text="Escolha o tema e aplique sem reiniciar. O alto contraste do Windows tem prioridade."};
         save.Click+=(_,_)=>{SavePaths();message.Text=homeHint!.Text;};forget.Click+=(_,_)=>{ForgetPaths();message.Text=homeHint!.Text;};
-        var apply=new Button{Text="Aplicar preferências"};Style(apply);
+        var apply=new ModernButton{Text="Aplicar preferências"};Style(apply);
         apply.Click+=(_,_)=>{
             checkUpdates=auto.Checked;SaveUpdatePreference(checkUpdates);
             try{var selected=new[]{"auto","dark","light"}[theme.SelectedIndex];Directory.CreateDirectory(Path.GetDirectoryName(ThemePreference)!);File.WriteAllText(ThemePreference,selected);ApplyLiveTheme(selected);message.Text="Preferências aplicadas.";}
             catch{message.Text="Não foi possível salvar o tema.";}
         };
-        var back=new Button{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();
+        var back=new ModernButton{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();
         var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true};actions.Controls.AddRange(new Control[]{apply,back});
         page.Controls.Add(theme,0,2);page.Controls.Add(auto,0,3);page.Controls.Add(save,0,4);page.Controls.Add(forget,0,5);page.Controls.Add(message,0,6);page.Controls.Add(actions,0,7);
         ShowInternalPage("preferences",page);
@@ -130,14 +130,14 @@ sealed partial class MainForm{
         foreach(int h in new[]{78,78,78,78})page.RowStyles.Add(new RowStyle(SizeType.Absolute,h));
         page.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         void Step(int row,string title,string desc,Action action){
-            var b=new Button{Text=title+"\n"+desc,Dock=DockStyle.Fill,AccessibleName=title,AccessibleDescription=desc,BackColor=PanelColor,ForeColor=Ink,FlatStyle=FlatStyle.Flat,TextAlign=ContentAlignment.MiddleLeft};
+            var b=new ModernButton{Text=title+"\n"+desc,Dock=DockStyle.Fill,AccessibleName=title,AccessibleDescription=desc,BackColor=PanelColor,ForeColor=Ink,FlatStyle=FlatStyle.Flat,TextAlign=ContentAlignment.MiddleLeft};
             DecorateButton(b,true);b.Click+=(_,_)=>action();page.Controls.Add(b,0,row);
         }
         Step(2,"1. Localizar ambiente","Escolha instalação e mundo.",()=>OpenTask(2,false,section:"environment"));
         Step(3,"2. Diagnosticar","Inspeção somente leitura.",()=>OpenTask(2,false,()=>Diagnose(),section:"diagnostic"));
         Step(4,"3. Gerenciar mods","Revise Master e Caves separadamente.",()=>OpenTask(2,false));
         Step(5,"4. Consultar backups","Confira as opções de recuperação.",()=>OpenTask(2,false,()=>OpenBackups(),section:"backups"));
-        var back=new Button{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();page.Controls.Add(back,0,6);
+        var back=new ModernButton{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();page.Controls.Add(back,0,6);
         ShowInternalPage("guide",page);
         if(!smokeMode)try{Directory.CreateDirectory(Path.GetDirectoryName(GuidePreference)!);File.WriteAllText(GuidePreference,"1");}catch{}
     }
@@ -164,10 +164,10 @@ sealed partial class MainForm{
         var snapshot=log.Text;var contents=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,BackColor=PanelColor,ForeColor=Ink,Text=snapshot.Length==0?"Nenhuma operação nesta sessão.":snapshot,AccessibleName="Registro local das operações"};
         var filter=new TextBox{Width=180,PlaceholderText="Buscar no registro",BackColor=PanelColor,ForeColor=Ink,AccessibleName="Pesquisar registro"};
         filter.TextChanged+=(_,_)=>contents.Text=string.Join(Environment.NewLine,snapshot.Split('\n').Where(line=>line.Contains(filter.Text,StringComparison.OrdinalIgnoreCase)).Select(line=>line.TrimEnd('\r')));
-        var copy=new Button{Text="Copiar visualização"};Style(copy);copy.Click+=(_,_)=>{try{if(contents.TextLength>0)Clipboard.SetText(contents.Text);}catch{Notice.Show(this,"Não foi possível copiar. Use Ctrl+C.","Registro");}};
+        var copy=new ModernButton{Text="Copiar visualização"};Style(copy);copy.Click+=(_,_)=>{try{if(contents.TextLength>0)Clipboard.SetText(contents.Text);}catch{Notice.Show(this,"Não foi possível copiar. Use Ctrl+C.","Registro");}};
         var tools=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true};tools.Controls.AddRange(new Control[]{new Label{Text="Pesquisar:",AutoSize=true,ForeColor=Muted,Margin=new Padding(4,8,2,0)},filter,copy});
-        var clear=new Button{Text="Apagar contagens locais"};Style(clear);clear.Click+=(_,_)=>{if(Notice.Show(this,"Apagar o histórico local de contagens?","Registro",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;try{if(File.Exists(ActivityPath))File.Delete(ActivityPath);RenderChart();}catch{Notice.Show(this,"Não foi possível apagar o histórico.","Registro");}};
-        var back=new Button{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();
+        var clear=new ModernButton{Text="Apagar contagens locais"};Style(clear);clear.Click+=(_,_)=>{if(Notice.Show(this,"Apagar o histórico local de contagens?","Registro",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;try{if(File.Exists(ActivityPath))File.Delete(ActivityPath);RenderChart();}catch{Notice.Show(this,"Não foi possível apagar o histórico.","Registro");}};
+        var back=new ModernButton{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();
         var footer=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true};footer.Controls.AddRange(new Control[]{clear,back});
         page.Controls.Add(chart,0,2);page.Controls.Add(tools,0,3);page.Controls.Add(contents,0,4);page.Controls.Add(footer,0,5);
         ShowInternalPage("log",page);

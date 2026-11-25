@@ -6,11 +6,11 @@ sealed partial class MainForm{
         var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=85,AutoScroll=true};
         var key=new TextBox{Width=210,UseSystemPasswordChar=true,PlaceholderText="Chave Steam Web API (usuário)",BackColor=PanelColor,ForeColor=Ink,MaxLength=32};
         var query=new TextBox{Width=240,Text=initial,PlaceholderText="Nome do mod",BackColor=PanelColor,ForeColor=Ink,MaxLength=120};
-        var search=new Button{Text="Pesquisar"};var next=new Button{Text="Próxima página",Enabled=false};var browser=new Button{Text="Abrir busca oficial"};
+        var search=new ModernButton{Text="Pesquisar"};var next=new ModernButton{Text="Próxima página",Enabled=false};var browser=new ModernButton{Text="Abrir busca oficial"};
         var hint=new Label{Dock=DockStyle.Bottom,Height=54,ForeColor=Muted,Text="A chave de usuário é usada apenas nesta sessão, no cabeçalho HTTPS da Steam. Não use uma chave de distribuidora."};
         var list=new ListBox{Dock=DockStyle.Fill,BackColor=PanelColor,ForeColor=Ink,DisplayMember="Title",HorizontalScrollbar=true};
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};
-        var add=new Button{Text="Adicionar ao "+shard,Enabled=false};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};
+        var add=new ModernButton{Text="Adicionar ao "+shard,Enabled=false};var cancel=new ModernButton{Text="Cancelar",DialogResult=DialogResult.Cancel};
         foreach(var b in new[]{search,next,browser,add,cancel})Style(b);
         bar.Controls.AddRange(new Control[]{query,key,search,next,browser});
         actions.Controls.AddRange(new Control[]{cancel,add});

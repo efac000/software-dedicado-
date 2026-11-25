@@ -53,18 +53,18 @@ sealed partial class MainForm{
         homeState=new Label{Dock=DockStyle.Fill,BackColor=Raised,ForeColor=Ink,Padding=new Padding(12,5,12,5),TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true,AccessibleName="Estado da seleção do servidor"};
         home.Controls.Add(homeState,0,2);
         var setup=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,AutoScroll=true};
-        homeDetect=new Button{Text="&Detectar e escolher"};Style(homeDetect);
+        homeDetect=new ModernButton{Text="&Detectar e escolher"};Style(homeDetect);
         homeDetect.Click+=async(_,_)=>{await AutoLocate();RefreshHome();};
-        var manual=new Button{Text="&Escolher pasta"};Style(manual);manual.Click+=(_,_)=>OpenTask(2,false,section:"environment");
-        var prefs=new Button{Text="&Preferências"};Style(prefs);prefs.Click+=(_,_)=>ShowPreferences();
+        var manual=new ModernButton{Text="&Escolher pasta"};Style(manual);manual.Click+=(_,_)=>OpenTask(2,false,section:"environment");
+        var prefs=new ModernButton{Text="&Preferências"};Style(prefs);prefs.Click+=(_,_)=>ShowPreferences();
         setup.Controls.AddRange(new Control[]{homeDetect,manual,prefs});
         homeActions.AddRange(new[]{homeDetect,manual,prefs});
         home.Controls.Add(setup,0,3);
-        var cards=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=2};
+        var cards=new BufferedTable{Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,BackColor=Bg,CellBorderStyle=TableLayoutPanelCellBorderStyle.None};
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         cards.RowStyles.Add(new RowStyle(SizeType.Percent,50));cards.RowStyles.Add(new RowStyle(SizeType.Percent,50));
         void Card(string title,string description,Action run,int x,int y){
-            var b=new Button{Text=title+"\n"+description,AccessibleName=title.Replace("&",""),AccessibleDescription=description,Dock=DockStyle.Fill,Margin=new Padding(4),TextAlign=ContentAlignment.MiddleLeft};
+            var b=new ModernButton{Text=title+"\n"+description,AccessibleName=title.Replace("&",""),AccessibleDescription=description,Dock=DockStyle.Fill,Margin=new Padding(4),TextAlign=ContentAlignment.MiddleLeft};
             b.AutoSize=false;b.FlatStyle=FlatStyle.Flat;b.BackColor=PanelColor;b.ForeColor=Ink;b.FlatAppearance.BorderColor=Border;DecorateButton(b,true);b.Font=new Font("Segoe UI",12);b.Padding=new Padding(12,4,12,4);b.Click+=(_,_)=>run();
             cards.Controls.Add(b,x,y);homeActions.Add(b);
         }
@@ -74,13 +74,13 @@ sealed partial class MainForm{
         Card("&Backups","Consultar e recuperar configurações",()=>OpenTask(2,false,()=>OpenBackups(),section:"backups"),1,1);
         home.Controls.Add(cards,0,4);
         var footer=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=false,WrapContents=true};
-        var advanced=new Button{Text="&Ferramentas avançadas"};Style(advanced);advanced.Click+=(_,_)=>OpenTask(2,true);
-        var help=new Button{Text="&Como usar"};Style(help);help.Click+=(_,_)=>ShowGettingStarted();
-        var updates=new Button{Text="Verificar at&ualização"};Style(updates);updates.Click+=async(_,_)=>await CheckBuild();
+        var advanced=new ModernButton{Text="&Ferramentas avançadas"};Style(advanced);advanced.Click+=(_,_)=>OpenTask(2,true);
+        var help=new ModernButton{Text="&Como usar"};Style(help);help.Click+=(_,_)=>ShowGettingStarted();
+        var updates=new ModernButton{Text="Verificar at&ualização"};Style(updates);updates.Click+=async(_,_)=>await CheckBuild();
         footer.Controls.AddRange(new Control[]{advanced,help,updates});homeActions.AddRange(new[]{advanced,help,updates});
-        var history=new Button{Text="&Registro"};Style(history);history.Click+=(_,_)=>ShowSessionLog();
+        var history=new ModernButton{Text="&Registro"};Style(history);history.Click+=(_,_)=>ShowSessionLog();
         footer.Controls.Add(history);homeActions.Add(history);
-        var feedback=new Button{Text="Feedbac&k e suporte"};Style(feedback);feedback.AccessibleDescription="Abre opções para relatar bugs ou sugerir melhorias no GitHub. Nenhum dado é enviado automaticamente.";
+        var feedback=new ModernButton{Text="Feedbac&k e suporte"};Style(feedback);feedback.AccessibleDescription="Abre opções para relatar bugs ou sugerir melhorias no GitHub. Nenhum dado é enviado automaticamente.";
         feedback.Click+=(_,_)=>ShowFeedback();footer.Controls.Add(feedback);homeActions.Add(feedback);
         home.Controls.Add(footer,0,5);
         homeHint=new Label{Dock=DockStyle.Fill,ForeColor=Muted,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft,AccessibleName="Orientação da tela inicial"};
