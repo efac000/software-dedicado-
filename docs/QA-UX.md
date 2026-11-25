@@ -26,3 +26,7 @@ A moldura DWM mantém funções nativas e a camada visual permanece WinForms. Um
 - Narrador/NVDA dispensados. Assinatura Authenticode e migração integral WPF não são requisitos desta entrega.
 
 O resultado comprova os cenários testados, não ausência absoluta de defeitos em todas as configurações possíveis.
+
+## Revisão de navegação 0e72320
+
+PR #29 integrado; testes locais de navegação em Diagnóstico e Backups nos dois temas aprovados. O catálogo permanece bloqueado durante edição. CI e release [45704640329](https://github.com/efac000/software-dedicado-/actions/runs/45704640329) aprovados, incluindo conferência de hashes antes da publicação e execução ARM64 nativa. O site recomenda a build 1.0.0-build-45704640329-1; ela continua marcada como pré-release no GitHub por não haver homologação em outras escalas físicas de DPI. A versão estável anterior permanece acessível.
