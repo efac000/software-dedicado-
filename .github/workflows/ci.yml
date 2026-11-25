@@ -17,6 +17,15 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet run --project tests/CoreTests -c Release
       - run: dotnet run --project tests/AccessibilityTests -c Release
+        env:
+          GDD_QA_CAPTURE_DIR: ${{ github.workspace }}/qa-captures
+      - name: Archive rendered UI fixture
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: UI-review-fixture
+          path: qa-captures/*.png
+          if-no-files-found: warn
       - name: Build portable Windows packages
         shell: pwsh
         run: |

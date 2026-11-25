@@ -9,6 +9,14 @@ static class AccessibilityTests{
     static object? Call(Form form,string name,params object?[] args)=>FormType.GetMethod(name,Instance)!.Invoke(form,args);
     static void Assert(bool pass,string message){if(!pass)throw new Exception(message);}
     static void WaitFor(Func<bool> done,string message){var clock=System.Diagnostics.Stopwatch.StartNew();while(!done()&&clock.ElapsedMilliseconds<5000){Application.DoEvents();System.Threading.Thread.Sleep(5);}Assert(done(),message);}
+    static void Capture(Form form,string name){
+        var folder=Environment.GetEnvironmentVariable("GDD_QA_CAPTURE_DIR");if(string.IsNullOrWhiteSpace(folder))return;
+        Directory.CreateDirectory(folder);var previous=form.Size;
+        try{form.Size=new Size(1100,830);form.PerformLayout();Application.DoEvents();
+            using var image=new Bitmap(form.Width,form.Height);form.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));
+            image.Save(Path.Combine(folder,name+".png"),System.Drawing.Imaging.ImageFormat.Png);
+        }finally{form.Size=previous;form.PerformLayout();Application.DoEvents();}
+    }
     static IEnumerable<Control> Desc(Control c)=>c.Controls.Cast<Control>().SelectMany(x=>new[]{x}.Concat(Desc(x)));
     static Form Create(string theme){
         FormType.GetMethod("ConfigurePalette",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[theme]);
@@ -89,17 +97,17 @@ static class AccessibilityTests{
                 var visited=new HashSet<Button>();
                 for(int i=0;i<36;i++){form.SelectNextControl(form.ActiveControl,true,true,true,true);Application.DoEvents();if(form.ActiveControl is Button b)visited.Add(b);}
                 Assert(visited.Count==22&&buttons.All(visited.Contains),"Tab traversal incomplete "+visited.Count);
-                Console.WriteLine("KEYBOARD_TAB_PASS "+theme);
+                Console.WriteLine("KEYBOARD_TAB_PASS "+theme);Capture(form,"home-"+theme);
                 if(!SystemInformation.HighContrast){
                     var prior=form.BackColor;
                     Call(form,"ShowPreferences");Application.DoEvents();
-                    Assert(Field<Panel>(form,"internalPage").Visible&&!host.Visible&&!mainHost.Visible,"Preferences not embedded");
+                    Assert(Field<Panel>(form,"internalPage").Visible&&!host.Visible&&!mainHost.Visible,"Preferences not embedded");Capture(form,"preferences-"+theme);
                     Call(form,"ApplyLiveTheme",theme=="dark"?"light":"dark");Application.DoEvents();
                     Assert(form.BackColor.ToArgb()!=prior.ToArgb(),"Live palette not applied");
                     Call(form,"ApplyLiveTheme",theme);Call(form,"ShowHome");Application.DoEvents();
                     Assert(form.BackColor.ToArgb()==prior.ToArgb()&&host.Visible,"Theme or navigation restore failed");
-                    Call(form,"ShowSessionLog");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"History not embedded");
-                    Call(form,"ShowHome");Call(form,"ShowGettingStarted");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"Guide not embedded");
+                    Call(form,"ShowSessionLog");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"History not embedded");Capture(form,"activity-"+theme);
+                    Call(form,"ShowHome");Call(form,"ShowGettingStarted");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"Guide not embedded");Capture(form,"guide-"+theme);
                     Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_PAGES_AND_LIVE_THEME_PASS "+theme);
                     Call(form,"OpenTask",2,false,null,false,"mods");Call(form,"Busy",true);
                     using(var content=new Panel()){
@@ -124,7 +132,7 @@ static class AccessibilityTests{
                     var add=Desc(catalog).OfType<Button>().Single(c=>c.Text=="Adicionar / ativar");
                     WaitFor(()=>add.Enabled,"Offline catalog lookup did not finish");idField.Text="123456789";add.PerformClick();
                     var review=Desc(catalog).OfType<Button>().Single(c=>c.Text=="Revisar plano");
-                    WaitFor(()=>review.Enabled,"Offline catalog add did not finish");review.PerformClick();
+                    WaitFor(()=>review.Enabled,"Offline catalog add did not finish");Capture(form,"catalog-"+theme);review.PerformClick();
                     WaitFor(()=>editing.IsCompleted,"Catalog review did not finish");
                     Assert(editing.IsCompletedSuccessfully&&editing.Result!=null,"Catalog result missing");
                     Assert(Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result!["Caves"])).ContainsKey("123456789")&&Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result["Master"])).Count==0,"Catalog changed wrong shard");
@@ -133,7 +141,7 @@ static class AccessibilityTests{
                     WaitFor(()=>Field<Panel>(form,"taskPageHost") is Panel page&&page.Name=="task-diagnostic"&&Desc(page).OfType<DataGridView>().Any()||diag.IsCompleted,"Diagnostic did not open");
                     Assert(!diag.IsCompleted,"Diagnostic ended before display: "+Field<TextBox>(form,"log").Text);
                     var diagnosticPage=Field<Panel>(form,"taskPageHost");
-                    Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing: "+Field<TextBox>(form,"log").Text);
+                    Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing: "+Field<TextBox>(form,"log").Text);Capture(form,"diagnostic-"+theme);
                     Desc(diagnosticPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar do diagnóstico").PerformClick();
                     WaitFor(()=>diag.IsCompleted,"Diagnostic did not return");
                     Assert(diag.IsCompletedSuccessfully&&mainHost.Visible,"Diagnostic did not restore workspace");
@@ -143,7 +151,7 @@ static class AccessibilityTests{
                     WaitFor(()=>Field<Panel>(form,"taskPageHost") is Panel page&&page.Name=="task-backups"||backupTask.IsCompleted,"Backups did not open");
                     Assert(!backupTask.IsCompleted,"Backup page ended before display");
                     var backupPage=Field<Panel>(form,"taskPageHost");
-                    Assert(Desc(backupPage).OfType<Label>().Any(l=>l.Text.Contains("Nenhum backup encontrado")),"Missing empty backup state");
+                    Assert(Desc(backupPage).OfType<Label>().Any(l=>l.Text.Contains("Nenhum backup encontrado")),"Missing empty backup state");Capture(form,"backups-"+theme);
                     Desc(backupPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar dos backups").PerformClick();
                     WaitFor(()=>backupTask.IsCompleted,"Backups did not return");
                     Assert(backupTask.IsCompletedSuccessfully&&mainHost.Visible,"Backups did not restore workspace");

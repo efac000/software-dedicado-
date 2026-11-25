@@ -99,3 +99,5 @@ A moldura utiliza cores DWM quando suportadas pelo Windows, preservando botões 
 O guia inicial aparece automaticamente quando ainda não foi aberto e nenhum mundo foi selecionado. O catálogo permite cancelar a consulta de metadados sem gravar alterações, inclusive durante requisições online. Testes em fixture validam separação de Master/Caves e retorno do diagnóstico.
 
 A área de tarefas exibe avisos de estado sem janelas extras, e a tela inicial mostra o último estado da atividade. O cálculo da geometria dos viewports é testado em 96/120/144/168/192 DPI simulados; isso não substitui execução em telas de DPI real. O teste de backups utiliza uma pasta temporária vazia, sem tocar nos backups do usuário.
+
+O CI gera capturas renderizadas da interface WinForms com um mundo descartável (temas claro e escuro, início, preferências, atividade, guia, catálogo, diagnóstico e backups), no artefato `UI-review-fixture`. Não são imagens de um servidor real; revisão visual humana ainda é necessária antes de atualizar as capturas oficiais.
