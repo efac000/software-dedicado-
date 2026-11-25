@@ -36,6 +36,7 @@ sealed partial class MainForm{
         search.Click+=async(_,_)=>await Load(false);next.Click+=async(_,_)=>await Load(true);
         query.AccessibleName="Nome do mod na Workshop";key.AccessibleName="Chave de usuário Steam Web API (não armazenada)";
         list.AccessibleName="Resultados da Workshop para "+shard;
+        PrepareAccessibility(dialog);
         dialog.AcceptButton=search;
         browser.Click+=(_,_)=>Open(WorkshopId.SearchUri(query.Text));
         query.TextChanged+=(_,_)=>{cursor=null;next.Enabled=false;list.Items.Clear();};
