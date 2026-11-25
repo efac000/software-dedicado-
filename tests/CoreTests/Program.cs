@@ -13,6 +13,8 @@ try{
     var conf=Path.Combine(root,"Klei","DST");Directory.CreateDirectory(conf);
     void World(string n,string data){var p=Path.Combine(conf,"Cluster_"+n);Directory.CreateDirectory(Path.Combine(p,"Master"));File.WriteAllText(Path.Combine(p,"cluster.ini"),"cluster_name = Teste "+n);File.WriteAllText(Path.Combine(p,"Master","server.ini"),"[SHARD]\nis_master = true");File.WriteAllText(Path.Combine(p,"Master","modoverrides.lua"),data);}
     World("1","return { ['workshop-42']={enabled=true} }");World("2","return { ['workshop-99']={enabled=true} }");
+    var account=Path.Combine(conf,"123456789");Directory.CreateDirectory(account);var accountCluster=Path.Combine(account,"Cluster_1");Directory.CreateDirectory(Path.Combine(accountCluster,"Master"));File.WriteAllText(Path.Combine(accountCluster,"cluster.ini"),"cluster_name = Cópia com acento");File.WriteAllText(Path.Combine(accountCluster,"Master","server.ini"),"[SHARD]");File.WriteAllText(Path.Combine(accountCluster,"Master","modoverrides.lua"),"return {}");
+    Check(Engine.Discover(conf).Length==3,"Detecção de contas");Check(Engine.Discover(conf).Count(c=>c.Number=="1")==2,"Clusters de mesmo número não podem ser confundidos");Check(Engine.Discover("").Length==0,"Pasta vazia");
     Reject(()=>Engine.Load(conf,"9"));Reject(()=>Engine.Load(conf,"1a"));
     var install=Path.Combine(root,"install");Directory.CreateDirectory(Path.Combine(install,"bin64"));Directory.CreateDirectory(Path.Combine(install,"mods"));File.WriteAllText(Path.Combine(install,"bin64","dontstarve_dedicated_server_nullrenderer_x64.exe"),"fake");
     var s=Engine.Load(conf,"1");var t=Engine.Load(conf,"2");

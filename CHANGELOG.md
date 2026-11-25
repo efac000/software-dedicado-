@@ -1,5 +1,12 @@
 # Histórico
 
+## 1.0.0 — revisão de compatibilidade
+
+- Seleção de origem e destino em pastas diferentes; detecção de subpastas numéricas de contas.
+- Pacotes autocontidos x64, x86 e ARM64; smoke tests x64/x86 na CI.
+- Bloqueio de caminhos de instalação sobrepostos aos mundos e de mods sem identificação.
+- Downloads por arquitetura e SHA-256 no site.
+
 ## 1.0.0 — revisão de segurança
 
 - Verificação de modinfo.lua no layout V2 documentado; a pasta vazia não conta como download.
