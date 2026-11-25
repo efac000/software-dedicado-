@@ -1,12 +1,12 @@
 # Gerenciador de Dedicado · 1.0.0
 
-Aplicativo independente para Windows x64 e servidores dedicados de Don't Starve Together. Projeto comunitário, não afiliado à Klei ou à Valve.
+Aplicativo independente para Windows x64, x86 e ARM64 e servidores dedicados de Don't Starve Together. Projeto comunitário, não afiliado à Klei ou à Valve.
 
 **Estado:** candidato a validação. Teste em um cluster descartável; não use em produção sem backup externo e teste real. A versão pública permanece 1.0.0; a revisão é identificada pelo commit e pelo número de build.
 
 ## Uso
 1. No DST, crie e gere um mundo temporário com os mods de servidor desejados. Salve e feche o jogo. Desligue os shards e qualquer reinício automático do servidor.
-2. Abra o aplicativo. Confira as pastas Klei e do dedicado; selecione os clusters de origem e destino (números inteiros existentes).
+2. Abra o aplicativo. Confira as pastas de origem, destino e instalação do dedicado (subpastas numéricas de contas são pesquisadas); selecione os clusters de origem e destino (números inteiros existentes).
 3. Analise o plano, consulte nomes/IDs e confira Master/Caves. Confirme a origem e, depois, digite RESET Cluster_N para o destino.
 4. Somente em instalação exclusiva, sem UGC personalizado, autorize a manutenção. O programa copia o cluster inteiro para backup local, preserva configurações e coloca caches antigos dos IDs afetados e UGC do destino em quarentena. A presença de caches UGC de outros clusters bloqueia a operação. Atualiza os shards sequencialmente sem iniciar o mundo; verifique logs e teste o servidor antes de liberar jogadores.
 
@@ -14,6 +14,9 @@ O programa não encerra servidores em execução, não edita saves, não apaga o
 
 ## Validação
 Os testes de integração usam diretórios temporários e simulam um download incompleto, restauração e sucesso, sem iniciar DST. Um servidor real com Steam Workshop continua necessário para homologação.
+
+## Compatibilidade
+.NET 10 autocontido: Windows 11 e edições do Windows 10 ainda suportadas pela Microsoft; o aplicativo não requer instalação separada do runtime. Windows 7/8 e Linux/macOS não são suportados. x64 e x86 são verificados em runner Windows x64; ARM64 é compilado, mas exige teste em hardware ARM. A disponibilidade do executável DST depende da plataforma; não prometemos servidor funcional em 32 bits/ARM. SteamCMD e caminhos personalizados de instalação podem ser selecionados manualmente; UGC personalizado continua bloqueado.
 
 ## Compilar
 Requer SDK .NET 10. No Windows: `dotnet run --project src/App`. Testes: `dotnet run --project tests/CoreTests`. Publicação: `dotnet publish src/App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true`.
