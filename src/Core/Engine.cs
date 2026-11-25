@@ -68,18 +68,24 @@ public static class Engine {
     static string[] Ids(byte[] content)=>Lua.Active(Utf8.GetString(content).TrimStart('\uFEFF')).Keys.Order().ToArray();
     // Only literal, individual Workshop registrations are supported; never execute setup Lua.
     static readonly Regex SetupToken=new("""\G(?:\s+|--\[(?<eq>=*)\[.*?\]\k<eq>\]|--(?!\[=*\[)[^\r\n]*|ServerModSetup\s*\(\s*(?<q>["'])(?<id>[1-9][0-9]{0,19})\k<q>\s*\)\s*;?)""",RegexOptions.Singleline|RegexOptions.CultureInvariant,TimeSpan.FromSeconds(2));
-    static void CheckSetup(byte[]? bytes,HashSet<string> affected){
-        if(bytes is null)return;
+    internal static HashSet<string> SetupIds(byte[]? bytes){
+        var ids=new HashSet<string>(StringComparer.Ordinal);
+        if(bytes is null)return ids;
         var text=Utf8.GetString(bytes).TrimStart('\uFEFF');
         for(int p=0;p<text.Length;){
             var m=SetupToken.Match(text,p);
             if(!m.Success||m.Length==0)throw new IOException("Setup global contém Lua não suportado ou coleção Workshop. Revise manualmente antes de continuar.");
             if(m.Groups["id"].Success){
                 var id=m.Groups["id"].Value;
-                if(!ulong.TryParse(id,out _)||!affected.Contains(id))throw new IOException("Setup global contém mod não relacionado ao plano: "+id+". Confirme que a instalação é exclusiva e revise o arquivo manualmente.");
+                if(!ulong.TryParse(id,out _))throw new IOException("ID inválido no setup global.");
+                ids.Add(id);
             }
             p+=m.Length;
         }
+        return ids;
+    }
+    static void CheckSetup(byte[]? bytes,HashSet<string> affected){
+        foreach(var id in SetupIds(bytes))if(!affected.Contains(id))throw new IOException("Setup global contém mod não relacionado ao plano: "+id+". Confirme que a instalação é exclusiva e revise o arquivo manualmente.");
     }
     public static Plan Analyze(Cluster source,Cluster target,string install)=>AnalyzeInternal(source,target,install,false,null,null);
     // In-place repair is explicit; copying a world onto itself remains prohibited.
