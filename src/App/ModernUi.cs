@@ -106,12 +106,12 @@ sealed partial class MainForm{
         b.VisibleChanged+=(_,_)=>{if(!b.Visible){motion.Stop();hover=down=false;blend=0;}};b.MouseDown+=(_,_)=>{down=true;b.Invalidate();};b.MouseUp+=(_,_)=>{down=false;b.Invalidate();};
         b.GotFocus+=(_,_)=>b.Invalidate();b.LostFocus+=(_,_)=>b.Invalidate();b.EnabledChanged+=(_,_)=>{Animate();b.Invalidate();};
         surface.RenderSurface=e=>{
-            var g=e.Graphics;var graphicsState=g.Save();g.SmoothingMode=SmoothingMode.AntiAlias;
+            var g=e.Graphics;var graphicsState=g.Save();g.SmoothingMode=SmoothingMode.None;g.PixelOffsetMode=PixelOffsetMode.None;
             int scale(int v)=>Math.Max(1,b.LogicalToDeviceUnits(v));
             int inset=scale(3);
             var r=new Rectangle(inset,inset,b.Width-2*inset-1,b.Height-2*inset-1);
             // Paint every pixel with the exact parent color before drawing the single rounded surface.
-            using(var background=new SolidBrush(b.Parent?.BackColor??Bg))g.FillRectangle(background,b.ClientRectangle);
+            using(var background=new SolidBrush(b.Parent?.BackColor??Bg))g.FillRectangle(background,b.ClientRectangle);g.SmoothingMode=SmoothingMode.AntiAlias;
             if(r.Width<4||r.Height<4){g.Restore(graphicsState);return;}
             Color Mix(Color a,Color c,float t)=>Color.FromArgb((int)(a.R+(c.R-a.R)*t),(int)(a.G+(c.G-a.G)*t),(int)(a.B+(c.B-a.B)*t));
             var fill=!b.Enabled?PanelColor:down?SelectionColor:b.BackColor==Accent?Accent:Mix(b.BackColor,Raised,blend);
