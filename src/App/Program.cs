@@ -30,7 +30,7 @@ sealed partial class MainForm:Form{
     static Color Bg=Color.FromArgb(9,15,30), PanelColor=Color.FromArgb(16,27,48), Ink=Color.FromArgb(237,244,255), Accent=Color.FromArgb(119,213,249), Border=Color.FromArgb(51,70,101), Muted=Color.FromArgb(170,187,211), Raised=Color.FromArgb(23,38,64);
     readonly TextBox root=new(),destinationRoot=new(),install=new(),log=new(){Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical};
     readonly ComboBox source=new(){DropDownStyle=ComboBoxStyle.DropDownList},target=new(){DropDownStyle=ComboBoxStyle.DropDownList};
-    readonly DataGridView grid=new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AllowUserToResizeRows=false};
+    readonly DataGridView grid=new BufferedGrid(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AllowUserToResizeRows=false};
     readonly CheckBox exclusive=new(){Text="Confirmo: instalação exclusiva, UGC padrão, servidor e reinício automático desligados.",AutoSize=true};
     readonly CheckBox online=new(){Text="Consultar nomes na Steam Workshop (envia somente IDs públicos).",Checked=true,AutoSize=true};
     readonly Button diagnose=new(){Text="Diagnóstico do dedicado"};
@@ -281,7 +281,7 @@ sealed partial class MainForm:Form{
             status.Text="Diagnóstico em leitura...";
             var findings=await Task.Run(()=>Diagnostics.Inspect(cluster,installation,Write));
             using var dialog=new BufferedPanel{BackColor=Bg,ForeColor=Ink,Padding=new Padding(20,12,20,12)};
-            var header=new TableLayoutPanel{Dock=DockStyle.Top,Height=100,ColumnCount=3,RowCount=2,Padding=new Padding(0,6,0,0)};
+            var header=new BufferedTable{Dock=DockStyle.Top,Height=100,ColumnCount=3,RowCount=2,Padding=new Padding(0,6,0,0)};
             for(int i=0;i<3;i++)header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3));
             header.RowStyles.Add(new RowStyle(SizeType.Absolute,63));header.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             foreach(var metric in new[]{(Severity.Error,"Erros",Bg.GetBrightness()<0.5f?Color.FromArgb(248,151,151):Color.FromArgb(145,33,33)),(Severity.Warning,"Avisos",WarningColor),(Severity.Info,"Informações",Accent)}){
@@ -290,7 +290,7 @@ sealed partial class MainForm:Form{
             }
             var sub=new Label{Text="Somente leitura. Indícios em logs podem ser históricos.",Dock=DockStyle.Fill,ForeColor=Muted,TextAlign=ContentAlignment.MiddleLeft};
             header.Controls.Add(sub,0,1);header.SetColumnSpan(sub,3);
-            var list=new DataGridView{AccessibleName="Resultados do diagnóstico",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.DisplayedCells,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
+            var list=new BufferedGrid{AccessibleName="Resultados do diagnóstico",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.DisplayedCells,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
             list.ColumnHeadersDefaultCellStyle.BackColor=Raised;list.ColumnHeadersDefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.BackColor=Bg;list.DefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.SelectionBackColor=Raised;list.DefaultCellStyle.SelectionForeColor=Accent;list.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
             foreach(var name in new[]{"Gravidade","Local","Problema","Ação recomendada"})list.Columns.Add(name,name);
             list.Columns[0].FillWeight=45;list.Columns[1].FillWeight=75;list.Columns[2].FillWeight=150;list.Columns[3].FillWeight=180;
@@ -378,7 +378,7 @@ sealed partial class MainForm:Form{
     async Task ShowPlan(Plan plan,bool lookup){
             var ids=plan.Shards.SelectMany(s=>s.Wanted.Concat(s.Old)).Distinct().ToArray();
             status.Text="Consultando nomes dos mods...";
-            var names=await Names(ids,plan,lookup);
+            var names=await Task.Run(()=>Names(ids,plan,lookup));
             foreach(var s in plan.Shards)foreach(var id in s.Wanted.Concat(s.Old).Distinct().Order()){
                 var action=s.Wanted.Contains(id)?s.Old.Contains(id)?(plan.Edited?"Reinstalar / opções editadas":plan.InPlace?"Reinstalar / manter opções":"Reinstalar / copiar opções"):"Adicionar":"Remover da configuração";
                 var rowIndex=grid.Rows.Add(names.GetValueOrDefault(id,"Nome não identificado"),id,s.Name,action);
@@ -406,7 +406,7 @@ sealed partial class MainForm:Form{
         var search=new TextBox{Width=200,MaxLength=120,PlaceholderText="Filtrar ou pesquisar por nome",BackColor=PanelColor,ForeColor=Ink,AccessibleName="Filtrar ou pesquisar mod por nome"};
         var message=new Label{Dock=DockStyle.Bottom,Height=38,ForeColor=Muted,Text="Alterações em memória. Selecione um shard e revise antes de aplicar.",AccessibleName="Estado da consulta"};
         var catalogSummary=new Label{Dock=DockStyle.Top,Height=42,BackColor=PanelColor,ForeColor=Ink,Padding=new Padding(10,0,0,0),TextAlign=ContentAlignment.MiddleLeft,AccessibleName="Contagem de mods do shard"};
-        var table=new DataGridView{AccessibleName="Catálogo de mods por shard",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
+        var table=new BufferedGrid{AccessibleName="Catálogo de mods por shard",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
         table.ColumnHeadersDefaultCellStyle.BackColor=Raised;table.ColumnHeadersDefaultCellStyle.ForeColor=Ink;table.DefaultCellStyle.BackColor=Bg;table.DefaultCellStyle.ForeColor=Ink;table.DefaultCellStyle.SelectionBackColor=Raised;table.DefaultCellStyle.SelectionForeColor=Accent;
         foreach(var h in new[]{"Mod","ID","Estado"})table.Columns.Add(h,h);table.Columns[0].FillWeight=180;table.Paint+=(_,e)=>{if(table.Rows.Count==0)TextRenderer.DrawText(e.Graphics,"Nenhum mod nesta visualização."+Environment.NewLine+"Adicione por ID/link ou pesquise na Workshop.",Font,new Rectangle(10,table.ColumnHeadersHeight+10,Math.Max(1,table.Width-20),Math.Max(1,table.Height-table.ColumnHeadersHeight-20)),Muted,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.WordBreak);};
         var preview=new PictureBox{Dock=DockStyle.Top,Height=210,BackColor=PanelColor,SizeMode=PictureBoxSizeMode.Zoom};preview.Paint+=(_,e)=>{if(preview.Image==null){int size=48;Glyph(e.Graphics,"puzzle",new RectangleF((preview.Width-size)/2,(preview.Height-size)/2,size,size),Muted);}};
@@ -421,20 +421,22 @@ sealed partial class MainForm:Form{
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};actions.Controls.Add(cancel);actions.Controls.Add(ok);
         dialog.Controls.Add(table);dialog.Controls.Add(panel);dialog.Controls.Add(message);dialog.Controls.Add(actions);dialog.Controls.Add(controls);dialog.Controls.Add(catalogSummary);
         var chart=new BufferedPanel{Dock=DockStyle.Top,Height=14,BackColor=PanelColor,AccessibleName="Proporção de mods ativos e desativados"};dialog.Controls.Add(chart);
-        bool loading=false;int previewGeneration=0;using var lifetime=new CancellationTokenSource();CancellationTokenSource? activePreview=null;
+        bool loading=false,populating=false;int previewGeneration=0;using var lifetime=new CancellationTokenSource();CancellationTokenSource? activePreview=null;
         string Shard()=>shard.SelectedItem!.ToString()!;
         string? Selected()=>table.CurrentRow?.Cells[1].Value as string;
         void ClearImage(){var old=preview.Image;preview.Image=null;old?.Dispose();}
         void Populate(string? select=null){
             var entries=Lua.Entries(texts[Shard()]);
             chart.Tag=(entries.Count(x=>x.Value),entries.Count);chart.Invalidate();
-            catalogSummary.Text=$"{Shard()}   |   {entries.Count} mods   |   {entries.Count(x=>x.Value)} ativos   |   {entries.Count(x=>!x.Value)} desativados";
-            table.Rows.Clear();
+            catalogSummary.Text=$"{plan.Target.Name} · {Shard()}   |   {entries.Count} mods   |   {entries.Count(x=>x.Value)} ativos   |   {entries.Count(x=>!x.Value)} desativados";
+            populating=true;table.SuspendLayout();
+            try{table.Rows.Clear();
             foreach(var (id,enabled) in entries.OrderBy(x=>names.GetValueOrDefault(x.Key,x.Key),StringComparer.OrdinalIgnoreCase)){
                 var name=names.GetValueOrDefault(id,"Nome não consultado");
                 if(!name.Contains(search.Text,StringComparison.OrdinalIgnoreCase)&&!id.Contains(search.Text,StringComparison.OrdinalIgnoreCase))continue;
                 var index=table.Rows.Add(name,id,enabled?"Ativo":"Desativado");if(id==select)table.CurrentCell=table.Rows[index].Cells[0];
-            }
+            }}finally{table.ResumeLayout();populating=false;}
+            UpdateCatalogActions();_ = ShowPreview();
         }
         void UpdateCatalogActions(){
             bool has=Selected()!=null;
@@ -447,7 +449,7 @@ sealed partial class MainForm:Form{
                 var all=texts.Values.SelectMany(t=>Lua.Entries(t).Keys).Distinct().ToArray();
                 message.Text="Consultando dados públicos da Workshop...";
                 var updated=new Dictionary<string,string>();
-                var found=await Names(all,plan,lookup,updated);
+                var found=await Task.Run(()=>Names(all,plan,lookup,updated));
                 if(lifetime.IsCancellationRequested||dialog.IsDisposed)return;
                 foreach(var (id,name) in found)names[id]=name;
                 foreach(var id in all)previews.Remove(id);
@@ -488,7 +490,7 @@ sealed partial class MainForm:Form{
             }catch(FormatException error){Notice.Show(this,error.Message,"Configuração inválida");}
         };
         shard.SelectedIndexChanged+=(_,_)=>Populate();search.TextChanged+=(_,_)=>Populate(Selected());
-        table.SelectionChanged+=async(_,_)=>{UpdateCatalogActions();await ShowPreview();};
+        table.SelectionChanged+=async(_,_)=>{if(populating)return;UpdateCatalogActions();await ShowPreview();};
         refresh.Click+=async(_,_)=>await Lookup();
         browseWorkshop.Click+=async(_,_)=>{
             if(loading)return;

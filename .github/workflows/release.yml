@@ -14,8 +14,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.1.0
         with:
           dotnet-version: '10.0.x'
       - run: dotnet run --project tests/CoreTests -c Release
@@ -48,7 +48,7 @@ jobs:
           }
           Get-ChildItem artifacts/*.exe | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + $_.Name } | Set-Content artifacts/SHA256.txt
           "1.0.0-build-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" | Set-Content artifacts/BuildTag.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: Gerenciador-de-Dedicado-1.0.0
           path: |
@@ -61,7 +61,7 @@ jobs:
     needs: test-build
     runs-on: windows-11-arm
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: Gerenciador-de-Dedicado-1.0.0
           path: qa
@@ -85,7 +85,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: Gerenciador-de-Dedicado-1.0.0
           path: artifacts

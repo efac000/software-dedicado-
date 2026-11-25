@@ -152,6 +152,9 @@ sealed partial class MainForm{
         try{
             int dark=Bg.GetBrightness()<0.5f?1:0;
             if(DwmSetWindowAttribute(Handle,20,ref dark,4)!=0)DwmSetWindowAttribute(Handle,19,ref dark,4);
+            // Retain native hit testing, Snap, system menu and accessible caption buttons.
+            int caption=ColorTranslator.ToWin32(PanelColor),text=ColorTranslator.ToWin32(Ink),border=ColorTranslator.ToWin32(Border);
+            DwmSetWindowAttribute(Handle,35,ref caption,4);DwmSetWindowAttribute(Handle,36,ref text,4);DwmSetWindowAttribute(Handle,34,ref border,4);
         }catch(DllNotFoundException){}catch(EntryPointNotFoundException){}
     }
     void SelectNav(string section){

@@ -93,3 +93,5 @@ A camada visual continua em WinForms/.NET; o núcleo funcional não foi reescrit
 
 ### Revisão de fluidez (candidata)
 Preferências, registro e primeiros passos passam a páginas internas, com aplicação de tema sem reiniciar e gráfico local de contagens diárias, limitado a 30 datas e apagável. Não guarda caminhos, tokens, IDs nem conteúdo de logs no histórico persistente; não representa êxito. Catálogo, diagnóstico e backups passam a páginas internas com bloqueio de navegação durante a edição ou escolha, cancelamento e revisão obrigatória. As confirmações de risco continuam modais. A análise indica etapas concluídas, não tempo restante. Exige CI e homologação visual antes de distribuição.
+
+A moldura utiliza cores DWM quando suportadas pelo Windows, preservando botões de sistema, Snap, redimensionamento e alto contraste. As consultas de metadados foram deslocadas da thread visual; tabelas usam double buffering. A migração integral WPF não foi realizada nesta revisão. As versões dos componentes GitHub Actions foram atualizadas; homologar todos os workflows antes da publicação.

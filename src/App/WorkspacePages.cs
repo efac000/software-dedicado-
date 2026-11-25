@@ -2,6 +2,7 @@ using System.Text.Json;
 namespace Gerenciador;
 sealed partial class MainForm{
     sealed class BufferedPanel:Panel{public BufferedPanel(){DoubleBuffered=true;ResizeRedraw=true;}}
+    sealed class BufferedGrid:DataGridView{public BufferedGrid(){DoubleBuffered=true;}}
     sealed class BufferedTable:TableLayoutPanel{public BufferedTable(){DoubleBuffered=true;ResizeRedraw=true;}}
     Panel? internalPage;
     TaskCompletionSource<bool>? taskPageResult;
@@ -11,9 +12,12 @@ sealed partial class MainForm{
         if(!busy||taskPageResult!=null)throw new InvalidOperationException("Área de trabalho ocupada.");
         var completion=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);taskPageResult=completion;taskPageCancel=cancel;
         HideInternalPage();homeHost!.Visible=false;mainHost!.Visible=false;
-        var viewport=CreateViewport(content,width,height);taskPageHost=viewport;workspace!.Controls.Add(viewport);viewport.BringToFront();
+        var shell=new BufferedPanel{BackColor=Bg,ForeColor=Ink};
+        var heading=new Label{Dock=DockStyle.Top,Height=LogicalToDeviceUnits(48),Padding=new Padding(16,0,0,0),Font=new Font("Segoe UI Semibold",18),ForeColor=Ink,TextAlign=ContentAlignment.MiddleLeft,Text=section switch{"mods"=>"Catálogo de mods","diagnostic"=>"Diagnóstico","backups"=>"Backups",_=>"Área de trabalho"}};
+        content.Dock=DockStyle.Fill;shell.Controls.Add(content);shell.Controls.Add(heading);
+        var viewport=CreateViewport(shell,width,height+48);taskPageHost=viewport;workspace!.Controls.Add(viewport);viewport.BringToFront();
         try{SelectNav(section);ModernControls(content);PrepareAccessibility(content);if(SystemInformation.HighContrast)UseSystemColors(content);cancel.Focus();return await completion.Task;}
-        finally{taskPageResult=null;taskPageCancel=null;taskPageHost=null;viewport.Controls.Remove(content);workspace.Controls.Remove(viewport);viewport.Dispose();mainHost.Visible=true;mainHost.BringToFront();}
+        finally{taskPageResult=null;taskPageCancel=null;taskPageHost=null;shell.Controls.Remove(content);workspace.Controls.Remove(viewport);viewport.Dispose();mainHost.Visible=true;mainHost.BringToFront();}
     }
     void FinishTaskPage(bool accepted){taskPageResult?.TrySetResult(accepted);}
     protected override bool ProcessCmdKey(ref Message msg,Keys keyData){
