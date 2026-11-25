@@ -9,7 +9,7 @@ static class Program {
     [STAThread] static int Main(string[] args){
         if(args.Length==1&&args[0]=="--self-test")return Engine.ValidNumber("1")&&!Engine.ValidNumber("1a")&&Lua.Active("return {}").Count==0?0:1;
         if(args.Length==1&&args[0]=="--self-test-ui"){
-            ApplicationConfiguration.Initialize();
+            ApplicationConfiguration.Initialize();MainForm.ConfigurePalette();
             using var form=new MainForm(true);
             using var associated=System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             if(associated==null||form.Icon==null||form.Handle==IntPtr.Zero)return 1;
@@ -18,10 +18,8 @@ static class Program {
             if(actual.Size!=expected.Size)return 1;
             for(int y=0;y<actual.Height;y++)for(int x=0;x<actual.Width;x++)
                 if(actual.GetPixel(x,y)!=expected.GetPixel(x,y))return 1;
-            if(!form.VerifyInterfaceLayout()||!form.VerifyHomeLayout())return 1;
-            MainForm.ConfigurePalette("light");
-            using var light=new MainForm(true);
-            return light.VerifyInterfaceLayout()&&light.VerifyHomeLayout()?0:1;
+            if(!SystemInformation.HighContrast&&form.BackColor.GetBrightness()>=0.5f)return 1;
+            return form.VerifyInterfaceLayout()&&form.VerifyHomeLayout()?0:1;
         }
         ApplicationConfiguration.Initialize();MainForm.ConfigurePalette();Application.Run(new MainForm());return 0;
     }

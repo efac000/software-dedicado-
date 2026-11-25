@@ -95,53 +95,26 @@ sealed partial class MainForm{
         page.Controls.Add(new Label{Text=subtitle,Dock=DockStyle.Fill,ForeColor=Muted},0,1);
         return page;
     }
-    void ApplyLiveTheme(string theme){
-        if(busy||SystemInformation.HighContrast)return;
-        var before=new[]{Bg,PanelColor,Raised,Ink,Muted,Accent,Border,SelectionColor,WarningColor,SuccessColor};
-        ConfigurePalette(theme);
-        var after=new[]{Bg,PanelColor,Raised,Ink,Muted,Accent,Border,SelectionColor,WarningColor,SuccessColor};
-        Color Map(Color value){for(int i=0;i<before.Length;i++)if(value.ToArgb()==before[i].ToArgb())return after[i];return value;}
-        void Cell(DataGridViewCellStyle s){s.BackColor=Map(s.BackColor);s.ForeColor=Map(s.ForeColor);s.SelectionBackColor=Map(s.SelectionBackColor);s.SelectionForeColor=Map(s.SelectionForeColor);}
-        void Visit(Control c){
-            var oldBack=c.BackColor;var oldFore=c.ForeColor;c.BackColor=Map(oldBack);c.ForeColor=Map(oldFore);
-            if(c is Button b){b.FlatAppearance.BorderColor=Map(b.FlatAppearance.BorderColor);b.FlatAppearance.MouseOverBackColor=Map(b.FlatAppearance.MouseOverBackColor);b.FlatAppearance.MouseDownBackColor=Map(b.FlatAppearance.MouseDownBackColor);}
-            if(c is DataGridView g){g.BackgroundColor=Map(g.BackgroundColor);g.GridColor=Map(g.GridColor);Cell(g.DefaultCellStyle);Cell(g.ColumnHeadersDefaultCellStyle);Cell(g.AlternatingRowsDefaultCellStyle);Cell(g.RowsDefaultCellStyle);}
-            foreach(Control child in c.Controls)Visit(child);c.Invalidate();
-        }
-        SuspendLayout();try{Visit(this);SelectNav(selectedSection);ApplyCaptionTheme();}finally{ResumeLayout(true);Invalidate(true);}
-    }
     void ShowPreferences(){
         if(busy)return;
-        var page=NewPage("Preferências","Aparência e caminhos locais. Nenhuma configuração do mundo é alterada.",8);
-        foreach(int h in new[]{50,48,48,48,62})page.RowStyles.Add(new RowStyle(SizeType.Absolute,h));
+        var page=NewPage("Preferências","Caminhos locais e consulta de atualizações. Tema escuro fixo. Nenhuma configuração do mundo é alterada.",7);
+        foreach(int h in new[]{48,48,48,62})page.RowStyles.Add(new RowStyle(SizeType.Absolute,h));
         page.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        var theme=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Top,AccessibleName="Tema da interface",BackColor=PanelColor,ForeColor=Ink};
-        theme.Items.AddRange(new object[]{"Automático (Windows)","Escuro","Claro"});theme.SelectedIndex=CurrentTheme() switch{"dark"=>1,"light"=>2,_=>0};
         var auto=new CheckBox{Text="Verificar builds ao abrir (consulta ao GitHub)",Checked=checkUpdates,AutoSize=true,AccessibleDescription="Não baixa nem instala automaticamente."};
         var save=new ModernButton{Text="Salvar caminhos selecionados"};Style(save);
         var forget=new ModernButton{Text="Esquecer caminhos salvos"};Style(forget);
-        var message=new Label{Dock=DockStyle.Fill,ForeColor=Muted,AccessibleName="Estado das preferências",Text="Escolha o tema e aplique sem reiniciar. O alto contraste do Windows tem prioridade."};
+        var message=new Label{Dock=DockStyle.Fill,ForeColor=Muted,AccessibleName="Estado das preferências",Text="O tema escuro é fixo. O alto contraste do Windows tem prioridade quando ativo."};
         save.Click+=(_,_)=>{SavePaths();message.Text=homeHint!.Text;};forget.Click+=(_,_)=>{ForgetPaths();message.Text=homeHint!.Text;};
         var apply=new ModernButton{Text="Aplicar preferências"};Style(apply);
         apply.Click+=(_,_)=>{
             bool updateSaved=TrySaveUpdatePreference(UpdatePreference,auto.Checked);
             if(updateSaved)checkUpdates=auto.Checked;
             else auto.Checked=checkUpdates;
-            bool themeSaved=false;
-            try{
-                var selected=new[]{"auto","dark","light"}[theme.SelectedIndex];
-                WritePreferenceAtomically(ThemePreference,selected);ApplyLiveTheme(selected);themeSaved=true;
-            }catch{theme.SelectedIndex=CurrentTheme() switch{"dark"=>1,"light"=>2,_=>0};}
-            message.Text=(updateSaved,themeSaved) switch{
-                (true,true)=>"Preferências aplicadas.",
-                (false,true)=>"Tema aplicado. Não foi possível salvar a consulta de atualizações; a opção anterior foi mantida.",
-                (true,false)=>"Consulta de atualizações salva. Não foi possível aplicar o tema.",
-                _=>"Não foi possível salvar as preferências. Confira as permissões e tente novamente."
-            };
+            message.Text=updateSaved?"Preferências aplicadas.":"Não foi possível salvar a consulta de atualizações. A opção anterior foi mantida.";
         };
         var back=new ModernButton{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();
         var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true};actions.Controls.AddRange(new Control[]{apply,back});
-        page.Controls.Add(theme,0,2);page.Controls.Add(auto,0,3);page.Controls.Add(save,0,4);page.Controls.Add(forget,0,5);page.Controls.Add(message,0,6);page.Controls.Add(actions,0,7);
+        page.Controls.Add(auto,0,2);page.Controls.Add(save,0,3);page.Controls.Add(forget,0,4);page.Controls.Add(message,0,5);page.Controls.Add(actions,0,6);
         ShowInternalPage("preferences",page);
     }
     static string GuidePreference=>Path.Combine(Path.GetDirectoryName(PreferencesPath)!,"guide-seen.txt");
