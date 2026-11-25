@@ -4,7 +4,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("CoreTests")]
 namespace Dedicado;
-public record Cluster(string Path,string Name,string Number,string[] Shards);
+public record Cluster(string Path,string Name,string Number,string[] Shards) {
+    public override string ToString()=> $"Cluster_{Number} — {Name} ({System.IO.Path.GetDirectoryName(Path)})";
+}
 public record ShardPlan(string Name,byte[] Content,string[] Wanted,string[] Old);
 public record Plan(Cluster Source,Cluster Target,string Install,string Exe,ShardPlan[] Shards,string Fingerprint) {
     public string[] Ids=>Shards.SelectMany(x=>x.Wanted).Distinct().Order().ToArray();
@@ -31,6 +33,15 @@ public static class Engine {
         var name=Regex.Match(File.ReadAllText(ini),@"(?m)^\s*cluster_name\s*=\s*([^\r\n]*)").Groups[1].Value.Trim();
         return new Cluster(p,name.Length>0?name:"(sem nome)",number,shards);
     }
+    public static Cluster[] Discover(string root){
+        if(string.IsNullOrWhiteSpace(root)||!Directory.Exists(root))return [];
+        SafePath(root);
+        var roots=new List<string>{root};
+        foreach(var child in Directory.GetDirectories(root)){
+            if(Regex.IsMatch(Path.GetFileName(child),@"\A[0-9]{1,20}\z"))try{SafePath(child);roots.Add(child);}catch(IOException){}
+        }
+        return roots.SelectMany(r=>Numbers(r).Select(n=>Load(r,n))).OrderBy(c=>int.Parse(c.Number)).ThenBy(c=>c.Path,StringComparer.OrdinalIgnoreCase).ToArray();
+    }
     public static string[] Numbers(string root)=>Directory.Exists(root)?Directory.GetDirectories(root,"Cluster_*").Select(x=>System.IO.Path.GetFileName(x)![8..]).Where(ValidNumber).Where(n=>{try{Load(root,n);return true;}catch{return false;}}).OrderBy(x=>int.Parse(x)).ToArray():[];
     public static void Offline(){
         foreach(var p in Process.GetProcesses()){
@@ -53,10 +64,12 @@ public static class Engine {
     }
     static string[] Ids(byte[] content)=>Lua.Active(Utf8.GetString(content).TrimStart('\uFEFF')).Keys.Order().ToArray();
     public static Plan Analyze(Cluster source,Cluster target,string install){
+        if(string.IsNullOrWhiteSpace(install)||!Directory.Exists(install))throw new IOException("Selecione uma instalação válida do servidor dedicado.");
         install=System.IO.Path.GetFullPath(install);
         if(string.Equals(source.Path,target.Path,StringComparison.OrdinalIgnoreCase))throw new ArgumentException("Origem igual ao destino.");
         if(!source.Shards.SequenceEqual(target.Shards))throw new ArgumentException("Master/Caves precisam corresponder entre os mundos.");
         var exe=FindExe(install);
+        if(IsWithin(source.Path,install)||IsWithin(target.Path,install)||IsWithin(install,source.Path)||IsWithin(install,target.Path))throw new IOException("A instalação e os clusters devem ficar em pastas separadas.");
         var mods=System.IO.Path.Combine(install,"mods");
         if(!Directory.Exists(mods))throw new IOException("Pasta mods não encontrada.");
         SafePath(mods);
@@ -69,6 +82,7 @@ public static class Engine {
         var fingerprint=Hash(Utf8.GetBytes(string.Join("|",new[]{source.Path,target.Path,install,FileHash(System.IO.Path.Combine(source.Path,"cluster.ini")),FileHash(System.IO.Path.Combine(target.Path,"cluster.ini")),File.Exists(setup)?FileHash(setup):"missing",File.Exists(settings)?FileHash(settings):"missing"}.Concat(shards.Select(s=>Hash(s.Content)+":"+Hash(Read(Override(target,s.Name),false)))))));
         return new(source,target,install,exe,shards,fingerprint);
     }
+    static bool IsWithin(string path,string parent){var a=Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);var b=Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar);return a.Equals(b,StringComparison.OrdinalIgnoreCase)||a.StartsWith(b+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}
     static void CopyTree(string source,string dest){
         SafePath(source);Directory.CreateDirectory(dest);
         foreach(var f in Directory.GetFiles(source)){SafePath(f);var d=System.IO.Path.Combine(dest,System.IO.Path.GetFileName(f));File.Copy(f,d);if(FileHash(f)!=FileHash(d))throw new IOException("Backup divergente.");}
@@ -97,7 +111,7 @@ public static class Engine {
         var backup=Path.Combine(backupBase,id);
         var quarantine=System.IO.Path.Combine(plan.Install,"GDD-quarentena",id);
         SafePath(backup);SafePath(quarantine);
-        if(backup.StartsWith(target.Path+System.IO.Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new IOException("Backup dentro do cluster.");
+        if(IsWithin(backup,target.Path)||IsWithin(backup,source.Path)||IsWithin(backup,plan.Install))throw new IOException("Backup dentro do cluster ou da instalação.");
         var mods=System.IO.Path.Combine(plan.Install,"mods");var setup=System.IO.Path.Combine(mods,"dedicated_server_mods_setup.lua");
         var ugc=System.IO.Path.Combine(plan.Install,"ugc_mods","Cluster_"+target.Number);
         SafePath(ugc);
@@ -129,7 +143,8 @@ public static class Engine {
                 foreach(var mod in s.Wanted){
                     var v1=Path.Combine(mods,"workshop-"+mod);
                     var v2=Path.Combine(ugcShard,"content","322330",mod);
-                    if(!HasMod(v1)&&!HasMod(v2))throw new IOException("Arquivos do mod "+mod+" não confirmados em "+s.Name+".");
+                    var v2Direct=Path.Combine(ugcShard,"workshop-"+mod);
+                    if(!HasMod(v1)&&!HasMod(v2)&&!HasMod(v2Direct))throw new IOException("Arquivos do mod "+mod+" não confirmados em "+s.Name+".");
                 }
             }
             File.AppendAllText(journal,"\nAtualizadores concluídos; confirme logs e teste mundo manualmente.");
