@@ -4,3 +4,20 @@
 .home-preview{margin:0}.home-preview a{display:block}.home-preview .app-shot{display:block;width:100%;height:auto}.home-preview figcaption{padding:12px 16px;font-size:.85rem;color:var(--muted)}.home-preview figcaption a{display:inline}.home-preview>a:focus-visible{outline-offset:-4px}
 #feedback{align-items:flex-start}#feedback .buttons{flex:1 1 280px;min-width:0}#feedback>div:first-child{flex:1 1 420px}#feedback .buttons a{flex:1 1 150px;text-align:center}@media(max-width:900px){#feedback>div:first-child,#feedback .buttons{flex:0 1 auto;width:100%}}
 .modern-shots{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;align-items:start;margin-top:22px}.modern-shots figure{margin:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#111827}.modern-shots img{width:100%;height:auto;display:block}.modern-shots figcaption{padding:12px 16px;color:#c0ccdf;font-size:.88rem}.modern-shots a{display:block}.modern-shots a:focus-visible{outline-offset:-4px}@media(max-width:760px){.modern-shots{grid-template-columns:1fr}}
+/* Text-first hero and real screenshots, without a simulated window frame. */
+body{background:var(--bg)}
+.hero{display:block;padding:68px 0 42px;max-width:850px}
+.hero h1{font-size:clamp(2.65rem,6.2vw,4.85rem)}
+.hero .lead{max-width:700px}
+.hero .buttons{margin-top:24px}
+.download{box-shadow:none}
+.modern-shots{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.modern-shots figure{background:var(--surface);border-radius:12px}
+.modern-shots figcaption{padding:14px 16px}
+.modern-shots figcaption strong,.modern-shots figcaption span{display:block}
+.modern-shots figcaption strong{color:var(--text);font-size:.95rem}
+.modern-shots figcaption span{color:var(--muted);font-size:.82rem;margin-top:4px}
+.candidate-download{margin-top:20px;border-top:1px solid var(--border);padding-top:20px}
+.candidate-download h3{margin:0 0 8px}
+.candidate-download .buttons{margin-top:12px}
+@media(max-width:700px){.hero{padding:42px 0 26px}.modern-shots{grid-template-columns:1fr}.candidate-download .buttons a{flex:1 1 150px}}
