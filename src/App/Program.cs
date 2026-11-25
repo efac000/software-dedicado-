@@ -39,7 +39,7 @@ sealed class MainForm:Form{
         root.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Klei","DoNotStarveTogether");
         install.Text=FindInstall();
         root.TextChanged+=(_,_)=>InvalidatePlan();install.TextChanged+=(_,_)=>InvalidatePlan();source.SelectedIndexChanged+=(_,_)=>InvalidatePlan();target.SelectedIndexChanged+=(_,_)=>InvalidatePlan();exclusive.CheckedChanged+=(_,_)=>reset.Enabled=!busy&&current!=null&&exclusive.Checked;
-        scan.Click+=(_,_)=>RefreshClusters();analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();backups.Click+=(_,_)=>OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
+        scan.Click+=(_,_)=>RefreshClusters();analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();backups.Click+=(_,_)=>OpenBackups();website.Click+=(_,_)=>Open("https://github.com/efac000/software-dedicado-/releases");
         FormClosing+=(_,e)=>{if(busy){e.Cancel=true;MessageBox.Show("A operação está em andamento. Aguarde a conclusão.");}};
         Shown+=(_,_)=>RefreshClusters();
     }
@@ -106,7 +106,7 @@ sealed class MainForm:Form{
                 using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                 foreach(var item in json.RootElement.GetProperty("response").GetProperty("publishedfiledetails").EnumerateArray()){
                     var id=item.GetProperty("publishedfileid").GetString();if(id==null||!chunk.Contains(id))continue;
-                    if(item.TryGetProperty("result",out var r)&&r.GetInt32()==1&&item.TryGetProperty("title",out var title))result[id]=(title.GetString()??"Nome não identificado").Replace("\r"," ").Replace("\n"," ");
+                    if(item.TryGetProperty("result",out var r)&&r.GetInt32()==1&&item.TryGetProperty("title",out var title)&&(!item.TryGetProperty("consumer_app_id",out var app)||app.GetInt32()==322330))result[id]=(title.GetString()??"Nome não identificado").Replace("\r"," ").Replace("\n"," ");
                     else result[id]="Workshop indisponível / privada";
                 }
             }
@@ -120,7 +120,7 @@ sealed class MainForm:Form{
         using var dialog=new Form{Text="Confirmação 2 de 2",Size=new Size(620,300),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
         var layout=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(15)};
         var phrase="RESET Cluster_"+p.Target.Number;
-        var label=new Label{Text="Destino: "+p.Target.Name+"\n"+p.Target.Path+"\n\nO cache Workshop V1 global desta instalação será movido.\nMods removidos podem afetar entidades ao iniciar o mundo.\nDigite exatamente: "+phrase,AutoSize=true,MaximumSize=new Size(570,0)};
+        var label=new Label{Text="Destino: "+p.Target.Name+"\n"+p.Target.Path+"\n\nSomente caches V1 dos IDs afetados e UGC do destino serão movidos.\nMods removidos podem afetar entidades ao iniciar o mundo.\nDigite exatamente: "+phrase,AutoSize=true,MaximumSize=new Size(570,0)};
         var input=new TextBox{Width=450};var confirm=new Button{Text="Executar",Enabled=false,DialogResult=DialogResult.OK};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};input.TextChanged+=(_,_)=>confirm.Enabled=input.Text==phrase;
         layout.Controls.Add(label);layout.Controls.Add(input);layout.Controls.Add(confirm);layout.Controls.Add(cancel);dialog.Controls.Add(layout);dialog.CancelButton=cancel;
         if(dialog.ShowDialog(this)!=DialogResult.OK||input.Text!=phrase)return;
