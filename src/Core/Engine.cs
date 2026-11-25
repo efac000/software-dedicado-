@@ -151,12 +151,12 @@ public static class Engine {
         var drive=new DriveInfo(driveRoot);
         if(!drive.IsReady||drive.AvailableFreeSpace<RequiredBackupBytes(bytes))throw new IOException("Espaço insuficiente ou indisponível para o backup do cluster. Libere espaço antes de continuar.");
     }
-    static void CopyTree(string source,string dest){
+    internal static void CopyTree(string source,string dest){
         SafePath(source);Directory.CreateDirectory(dest);
         foreach(var f in Directory.GetFiles(source)){SafePath(f);var d=System.IO.Path.Combine(dest,System.IO.Path.GetFileName(f));File.Copy(f,d);if(FileHash(f)!=FileHash(d))throw new IOException("Backup divergente.");}
         foreach(var dir in Directory.GetDirectories(source)){SafePath(dir);CopyTree(dir,System.IO.Path.Combine(dest,System.IO.Path.GetFileName(dir)));}
     }
-    static void Atomic(string path,byte[] data){
+    internal static void Atomic(string path,byte[] data){
         SafePath(path);var tmp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
         try{File.WriteAllBytes(tmp,data);File.Move(tmp,path,true);}finally{if(File.Exists(tmp))File.Delete(tmp);}
         if(FileHash(path)!=Hash(data))throw new IOException("Falha na conferência de "+path);
