@@ -32,7 +32,7 @@ sealed partial class MainForm {
             if(declaration!=null&&declaration.Default.Kind==option.Kind){
                 var choices=declaration.Choices.ToList();
                 if(!choices.Any(x=>x.Value==option.Value))choices.Insert(0,new ModChoice("Valor atual (fora das escolhas): "+option.Value,option.Kind,option.Value));
-                var combo=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,BackColor=PanelColor,ForeColor=Ink,Anchor=AnchorStyles.Left|AnchorStyles.Right,DisplayMember="Label"};
+                var combo=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,BackColor=PanelColor,ForeColor=Ink,Anchor=AnchorStyles.Left|AnchorStyles.Right,DisplayMember="Label",AccessibleName=declaration.Label,AccessibleDescription=option.Name};
                 combo.Items.AddRange(choices.Cast<object>().ToArray());
                 combo.SelectedIndex=choices.FindIndex(x=>x.Value==option.Value);
                 list.Controls.Add(combo);
@@ -82,6 +82,6 @@ sealed partial class MainForm {
                 MessageBox.Show(dialog,error.Message,"Opção inválida",MessageBoxButtons.OK,MessageBoxIcon.Warning);
             }
         };
-        return dialog.ShowDialog(owner)==DialogResult.OK?edited:initial;
+        PrepareAccessibility(dialog);return dialog.ShowDialog(owner)==DialogResult.OK?edited:initial;
     }
 }

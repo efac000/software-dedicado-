@@ -76,3 +76,12 @@ A janela indica quando existe recuperação pendente e bloqueia a aplicação de
 A tela inicial apresenta quatro tarefas: gerenciar mods, atualizar o dedicado, diagnosticar e consultar backups. Detectar e escolher permite selecionar instalações e mundos sem escrever neles. O modo simples apresenta o caminho e a análise; Ferramentas avançadas mantém cópia entre mundos, reinstalação e editor Lua. Voltar ao Início descarta o plano e a confirmação de exclusividade, mas não os caminhos escolhidos.
 
 Em Preferências, é possível salvar ou esquecer os caminhos locais (sem salvar credenciais), escolher tema claro/escuro/automático e optar pela verificação de builds ao abrir. O tema entra em vigor ao reabrir o aplicativo. A verificação consulta a release estável do GitHub e nunca instala nada automaticamente. O Registro mostra apenas as operações da sessão atual. Os atalhos de teclado Alt + letra e Tab permitem navegar pela interface; o Windows pode ativar alto contraste. Ainda não foi realizada homologação formal com leitores de tela ou monitores de diferentes DPI.
+
+## Feedback e acessibilidade
+O projeto é gratuito, em português brasileiro e sem telemetria. Use **Feedback e suporte** na tela inicial: o identificador da build pode ser copiado, e os formulários públicos do GitHub são abertos no navegador. Nenhuma informação do servidor, token, chave ou log é anexada ou enviada automaticamente.
+- [Relatar bug](https://github.com/efac000/software-dedicado-/issues/new?template=bug.yml)
+- [Sugerir melhoria](https://github.com/efac000/software-dedicado-/issues/new?template=suggestion.yml)
+- [Consultar relatos](https://github.com/efac000/software-dedicado-/issues)
+
+Use Tab/Shift+Tab ou Alt + letra sublinhada para navegar. Em janelas menores, role as áreas do aplicativo; os controles permanecem acessíveis. Os textos de status são expostos com nome e descrição atualizados e eventos de região dinâmica. A janela principal ajusta-se à área útil da tela. Não é necessário instalar ferramenta adicional.
+A suíte de regressão verifica contraste de texto (4,5:1), teclado, nomes acessíveis, rolagem, cancelamento e preservação dos arquivos em cinco tamanhos de janela nos temas claro/escuro. Foi verificada também a árvore UI Automation em processo externo no Windows. Os testes de viewport foram feitos a 96 DPI, incluindo dimensões lógicas reduzidas que representam menos espaço disponível; não substituem testes em monitores físicos de diferentes escalas nem avaliação auditiva com leitores de tela. Não há alegação de certificação integral de acessibilidade.

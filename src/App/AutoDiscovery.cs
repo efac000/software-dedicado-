@@ -103,7 +103,7 @@ sealed partial class MainForm {
         if(cli.Items.Count==1)cli.SelectedIndex=0;
         if(selectedSteamCmd!=null&&cli.Items.Contains(selectedSteamCmd))cli.SelectedItem=selectedSteamCmd;
         foreach(var entry in new (string,Control)[]{("Instalação dedicada ("+installs.Items.Count+")",installs),("Cluster / mundo ("+worlds.Items.Count+")",worlds),("SteamCMD encontrado ("+cli.Items.Count+")",cli)}){
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(new Label{Text=entry.Item1,AutoSize=true});
+            entry.Item2.AccessibleName=entry.Item1;layout.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(new Label{Text=entry.Item1,AutoSize=true});
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute,40));layout.Controls.Add(entry.Item2);
         }
         var footer=new Label{Dock=DockStyle.Bottom,Height=45,ForeColor=Muted,Text="A detecção não pesquisa a unidade inteira, não executa arquivos e não lê tokens. Use Procurar para caminhos personalizados."};
@@ -113,7 +113,7 @@ sealed partial class MainForm {
         void Update()=>apply.Enabled=installs.SelectedItem!=null||worlds.SelectedItem!=null||cli.SelectedItem!=null;
         installs.SelectedIndexChanged+=(_,_)=>Update();worlds.SelectedIndexChanged+=(_,_)=>Update();cli.SelectedIndexChanged+=(_,_)=>Update();
         actions.Controls.AddRange(new Control[]{cancel,apply});dialog.Controls.Add(layout);dialog.Controls.Add(info);dialog.Controls.Add(footer);dialog.Controls.Add(actions);dialog.CancelButton=cancel;
-        if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+        PrepareAccessibility(dialog);if(dialog.ShowDialog(this)!=DialogResult.OK)return;
         exclusive.Checked=false;
         if(cli.SelectedItem is string selectedCli)selectedSteamCmd=selectedCli;
         if(installs.SelectedItem is DetectedInstall selected)install.Text=selected.Path;
