@@ -52,3 +52,7 @@ Validação de uma instalação DST real ainda necessária.
 
 ## Revisão de atualização do dedicado — 1.0.0
 - Atualizador SteamCMD integrado para instalações independentes, validação opcional, confirmação dupla, backup e proteção das configurações de mods.
+
+## Revisão de instalação assistida — 1.0.0
+- Detecção e download opcional do SteamCMD oficial em pasta local isolada, sem sobrescrita nem execução automática.
+- Extração restrita, limites de tamanho, verificação PE e testes contra entradas ZIP inválidas.
