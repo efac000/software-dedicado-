@@ -39,3 +39,6 @@ O workflow CI executa testes e compila; a publicação de uma revisão candidata
 - [Steam Workshop API](https://partner.steamgames.com/doc/webapi/ISteamRemoteStorage)
 - [Microsoft: single-file](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview)
 - [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
+
+### Gerenciador visual
+Escolha o modo **Gerenciar mods visualmente**, selecione o dedicado e analise. O catálogo permite incluir mods por ID ou URL HTTPS oficial da Workshop, ativar/desativar por shard preservando as opções, filtrar pelo nome/ID e consultar imagens originais da Workshop quando disponíveis. O editor Lua avançado continua opcional. Um cluster existente sem modoverrides.lua pode receber os primeiros mods diretamente; não é necessário gerar um mundo de referência. Não substitui a criação inicial do próprio servidor. A manutenção exige revisão e duas confirmações. Imagens são consultadas de domínios Steam permitidos, com limites de tamanho e tempo. A detecção verifica Documentos/OneDrive e instalações Steam/SteamCMD convencionais; caminhos personalizados podem ser selecionados manualmente.

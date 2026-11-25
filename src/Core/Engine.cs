@@ -36,6 +36,9 @@ public static class Engine {
     public static Cluster[] Discover(string root){
         if(string.IsNullOrWhiteSpace(root)||!Directory.Exists(root))return [];
         SafePath(root);
+        var rootName=Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
+        if(rootName.StartsWith("Cluster_",StringComparison.Ordinal)&&ValidNumber(rootName[8..]))
+            return new[]{Load(Path.GetDirectoryName(Path.GetFullPath(root))!,rootName[8..])};
         var roots=new List<string>{root};
         foreach(var child in Directory.GetDirectories(root)){
             if(Regex.IsMatch(Path.GetFileName(child),@"\A[0-9]{1,20}\z"))try{SafePath(child);roots.Add(child);}catch(IOException){}
@@ -81,7 +84,8 @@ public static class Engine {
     public static Plan Analyze(Cluster source,Cluster target,string install)=>AnalyzeInternal(source,target,install,false,null,null);
     // In-place repair is explicit; copying a world onto itself remains prohibited.
     public static Plan AnalyzeRepair(Cluster target,string install,IReadOnlyDictionary<string,byte[]>? proposed=null,string? expectedBaseline=null)=>AnalyzeInternal(target,target,install,true,proposed,expectedBaseline);
-    static Plan AnalyzeInternal(Cluster source,Cluster target,string install,bool inPlace,IReadOnlyDictionary<string,byte[]>? proposed,string? expectedBaseline){
+    public static Plan AnalyzeEditBaseline(Cluster target,string install)=>AnalyzeInternal(target,target,install,true,null,null,true);
+    static Plan AnalyzeInternal(Cluster source,Cluster target,string install,bool inPlace,IReadOnlyDictionary<string,byte[]>? proposed,string? expectedBaseline,bool allowEmpty=false){
         if(string.IsNullOrWhiteSpace(install)||!Directory.Exists(install))throw new IOException("Selecione uma instalação válida do servidor dedicado.");
         install=System.IO.Path.GetFullPath(install);
         if(string.Equals(source.Path,target.Path,StringComparison.OrdinalIgnoreCase)!=inPlace)throw new ArgumentException("Origem igual ao destino no modo de cópia.");
@@ -100,18 +104,19 @@ public static class Engine {
         // Capture each override once; missing and empty-table files are different states.
         var fingerprintParts=new List<string>{inPlace?"reparo":"copia",source.Path,target.Path,install,exe,FileHash(Path.Combine(source.Path,"cluster.ini")),FileHash(Path.Combine(target.Path,"cluster.ini")),setupBytes is null?"missing":Hash(setupBytes),File.Exists(settings)?FileHash(settings):"missing"};
         var shards=source.Shards.Select(s=>{
-            var data=Read(Override(source,s),true)!;
-            var previous=inPlace?data:Read(Override(target,s),false);
+            var original=Read(Override(source,s),!inPlace);
+            var data=original??Utf8.GetBytes("return {}");
+            var previous=inPlace?original:Read(Override(target,s),false);
             var sourceIni=Path.Combine(source.Path,s,"server.ini");
             var targetIni=Path.Combine(target.Path,s,"server.ini");
             SafePath(sourceIni);SafePath(targetIni);
-            fingerprintParts.AddRange(new[]{s,FileHash(sourceIni),FileHash(targetIni),Hash(data),previous is null?"missing":Hash(previous)});
+            fingerprintParts.AddRange(new[]{s,FileHash(sourceIni),FileHash(targetIni),original is null?"missing":Hash(data),previous is null?"missing":Hash(previous)});
             var wanted=proposed is null?data:proposed[s].ToArray();
             if(wanted.Length>4_000_000)throw new IOException("Arquivo Lua editado grande demais.");
             return new ShardPlan(s,wanted,Ids(wanted),previous is null?[]:Ids(previous));
         }).ToArray();
 
-        if(!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado; remoção integral não suportada.");
+        if(!allowEmpty&&!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado; remoção integral não suportada.");
         CheckSetup(setupBytes,shards.SelectMany(s=>s.Old.Concat(s.Wanted)).ToHashSet(StringComparer.Ordinal));
         var baseline=Hash(Utf8.GetBytes(System.Text.Json.JsonSerializer.Serialize(fingerprintParts)));
         if(expectedBaseline!=null&&baseline!=expectedBaseline)throw new IOException("Arquivos mudaram durante a edição; analise novamente.");
