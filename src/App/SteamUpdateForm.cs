@@ -9,11 +9,11 @@ sealed partial class MainForm {
         if(existing!=null){try{Engine.SafePath(existing);if(!File.Exists(existing))existing=null;}catch{existing=null;}}
         existing??=SteamBootstrap.Find();
         string exe;
-        var choice=MessageBox.Show(this,existing!=null?"SteamCMD localizado:\n"+existing+"\n\nSim: usar este executável. Não: selecionar outro.":"SteamCMD não localizado.\n\nSim: baixar a versão oficial da Valve para a pasta local do aplicativo. Não: selecionar um steamcmd.exe existente.","SteamCMD",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Question,MessageBoxDefaultButton.Button3);
+        var choice=Notice.Show(this,existing!=null?"SteamCMD localizado:\n"+existing+"\n\nSim: usar este executável. Não: selecionar outro.":"SteamCMD não localizado.\n\nSim: baixar a versão oficial da Valve para a pasta local do aplicativo. Não: selecionar um steamcmd.exe existente.","SteamCMD",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Question,MessageBoxDefaultButton.Button3);
         if(choice==DialogResult.Cancel)return;
         if(choice==DialogResult.Yes&&existing!=null)exe=existing;
         else if(choice==DialogResult.Yes){
-            if(MessageBox.Show(this,"Baixar SteamCMD de:\n"+SteamBootstrap.OfficialUrl+"\n\nDestino: "+SteamBootstrap.ManagedDirectory+"\nO download não iniciará o executável. O pacote será conferido por estrutura e HTTPS; não há hash oficial fixo incorporado.","Instalar SteamCMD",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+            if(Notice.Show(this,"Baixar SteamCMD de:\n"+SteamBootstrap.OfficialUrl+"\n\nDestino: "+SteamBootstrap.ManagedDirectory+"\nO download não iniciará o executável. O pacote será conferido por estrutura e HTTPS; não há hash oficial fixo incorporado.","Instalar SteamCMD",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
             Busy(true);
             try{status.Text="Baixando SteamCMD oficial...";exe=await SteamBootstrap.InstallAsync(Write);status.Text="SteamCMD instalado. Revise a atualização do dedicado.";}
             catch(Exception e){Write("Instalação SteamCMD bloqueada: "+e.Message);status.Text="SteamCMD não instalado.";return;}
@@ -26,7 +26,7 @@ sealed partial class MainForm {
         }
         try{SteamUpdate.Check(exe,chosen,installation);Engine.Offline();}
         catch(Exception e){Write("Atualização bloqueada: "+e.Message);return;}
-        using var dialog=new Form{Text="Atualização do dedicado via SteamCMD",Size=new Size(720,450),MinimumSize=new Size(620,400),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
+        using var dialog=new ModernDialog{Text="Atualização do dedicado via SteamCMD",Size=new Size(720,450),MinimumSize=new Size(620,400),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
         var body=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(12)};
         bool resuming;
         try{resuming=SteamUpdate.Pending(Recovery.DefaultRoot).Length>0;}
@@ -43,7 +43,7 @@ sealed partial class MainForm {
         exclusiveInstall.CheckedChanged+=(_,_)=>Refresh();input.TextChanged+=(_,_)=>Refresh();
         body.Controls.Add(info);body.Controls.Add(exclusiveInstall);body.Controls.Add(validate);body.Controls.Add(label);body.Controls.Add(input);body.Controls.Add(update);body.Controls.Add(cancel);dialog.Controls.Add(body);dialog.CancelButton=cancel;
         PrepareAccessibility(dialog);if(dialog.ShowDialog(this)!=DialogResult.OK||!exclusiveInstall.Checked||input.Text!=phrase)return;
-        if(MessageBox.Show(this,"Confirma a atualização do binário em "+installation+"? O servidor permanecerá desligado.","Confirmação final",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+        if(Notice.Show(this,"Confirma a atualização do binário em "+installation+"? O servidor permanecerá desligado.","Confirmação final",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
         var check=validate.Checked;InvalidatePlan();exclusive.Checked=false;Busy(true);
         try{
             status.Text="Atualizando o dedicado via SteamCMD...";
