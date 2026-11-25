@@ -268,6 +268,7 @@ sealed partial class MainForm:Form{
         foreach(Control row in mainLayout!.Controls)if(row is TableLayoutPanel)row.Enabled=!b;
         diagnose.Enabled=backups.Enabled=!b;activity.Visible=b;foreach(var button in navButtons)button.Enabled=!b;RefreshMode();if(!b)RefreshRecoveryNotice();else UpdateActions();RefreshHome();
         if(ended){lastActivityMessage=status.Text;RefreshActivity();if(!smokeMode)RecordActivity();}
+        if(!b&&pendingNavigation is Action nextNavigation){pendingNavigation=null;BeginInvoke((Action)(()=>{if(!busy&&!IsDisposed)nextNavigation();}));}
     }
     async Task Diagnose(){
         EnsureUiContext();
@@ -333,7 +334,7 @@ sealed partial class MainForm:Form{
 
             var copyReport=new ModernButton{Text="Copiar relatório"};Style(copyReport);
             copyReport.Click+=(_,_)=>{try{Clipboard.SetText(string.Join(Environment.NewLine,findings.Select(f=>$"[{f.Level}] {f.Scope}: {f.Problem} — {f.Advice}")));}catch(Exception){Notice.Show(this,"Não foi possível copiar o relatório.","Diagnóstico");}};
-            controls.Controls.Add(close);controls.Controls.Add(export);controls.Controls.Add(copyReport);controls.Controls.Add(prepare);dialog.Controls.Add(list);dialog.Controls.Add(filters);dialog.Controls.Add(header);dialog.Controls.Add(guidance);dialog.Controls.Add(controls);close.Click+=(_,_)=>FinishTaskPage(false);await ShowTaskPage("diagnostic",dialog,840,560,close);
+            controls.Controls.Add(close);controls.Controls.Add(export);controls.Controls.Add(copyReport);controls.Controls.Add(prepare);dialog.Controls.Add(list);dialog.Controls.Add(filters);dialog.Controls.Add(header);dialog.Controls.Add(guidance);dialog.Controls.Add(controls);close.Click+=(_,_)=>FinishTaskPage(false);if(!await ShowTaskPage("diagnostic",dialog,840,560,close))next=DiagnosticAction.None;
             status.Text="Diagnóstico concluído. Nenhuma alteração no dedicado.";
         }catch(Exception e){next=DiagnosticAction.None;Write("Diagnóstico não concluído: "+e.Message);status.Text="Diagnóstico incompleto.";}finally{Busy(false);}
         if(next!=DiagnosticAction.None){

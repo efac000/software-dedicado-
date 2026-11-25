@@ -10,6 +10,15 @@ sealed partial class MainForm{
     Button? taskPageCancel;
     Label? taskPageStatus;
     string? lastActivityMessage;
+    Action? pendingNavigation;
+    bool taskPageAllowsNavigation;
+    bool CanNavigateTaskPage=>taskPageAllowsNavigation&&taskPageResult is {Task.IsCompleted:false};
+    void NavigateSidebar(string section,Action action){
+        if(!busy){action();return;}
+        if(!CanNavigateTaskPage||selectedSection==section)return;
+        pendingNavigation=action;
+        FinishTaskPage(false);
+    }
     void EnsureUiContext(){
         if(InvokeRequired)throw new InvalidOperationException("A tarefa visual exige a thread da interface.");
         if(System.Threading.SynchronizationContext.Current is not WindowsFormsSynchronizationContext)
@@ -34,14 +43,19 @@ sealed partial class MainForm{
             finally{workspace.ResumeLayout(true);}
             viewport.PerformLayout();shell.PerformLayout();content.PerformLayout();
             taskPageStatus=notice;status.TextChanged+=StatusChanged;
-            taskPageHost=viewport;cancel.Focus();
+            taskPageHost=viewport;
+            // Only idle read-only pages can be abandoned via navigation; writes and catalog editing stay locked.
+            taskPageAllowsNavigation=section is "diagnostic" or "backups";
+            if(taskPageAllowsNavigation)foreach(var button in navButtons)button.Enabled=true;
+            cancel.Focus();
             return await completion.Task;
         }finally{
+            taskPageAllowsNavigation=false;foreach(var button in navButtons)button.Enabled=false;
             status.TextChanged-=StatusChanged;taskPageStatus=null;taskPageResult=null;taskPageCancel=null;taskPageHost=null;
             shell.Controls.Remove(content);workspace?.Controls.Remove(viewport);viewport.Dispose();mainHost.Visible=true;mainHost.BringToFront();
         }
     }
-    void FinishTaskPage(bool accepted){if(taskPageResult?.TrySetResult(accepted)==true&&taskPageHost!=null)taskPageHost.Enabled=false;}
+    void FinishTaskPage(bool accepted){if(taskPageResult?.TrySetResult(accepted)==true&&taskPageHost!=null){taskPageHost.Enabled=false;foreach(var button in navButtons)button.Enabled=false;}}
     protected override bool ProcessCmdKey(ref Message msg,Keys keyData){
         if(keyData==Keys.Escape&&taskPageCancel is {Enabled:true,Visible:true}){taskPageCancel.PerformClick();return true;}
         return base.ProcessCmdKey(ref msg,keyData);
