@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry_deployment.outputs.page_url || steps.final_deployment.outputs.page_url }}
     env:
       PAGES_ARTIFACT: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -46,7 +46,42 @@ jobs:
           done
           echo "::error::Uploaded Pages artifact not visible within the retry window."
           exit 1
+      - name: Allow artifact metadata to propagate
+        run: sleep 20
       - uses: actions/deploy-pages@v5.0.1
         id: deployment
+        continue-on-error: true
         with:
           artifact_name: ${{ env.PAGES_ARTIFACT }}
+      - name: Wait before retrying deployment
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - uses: actions/deploy-pages@v5.0.1
+        id: retry_deployment
+        if: steps.deployment.outcome == 'failure'
+        continue-on-error: true
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT }}
+      - name: Wait before final deployment attempt
+        if: steps.retry_deployment.outcome == 'failure'
+        run: sleep 45
+      - uses: actions/deploy-pages@v5.0.1
+        id: final_deployment
+        if: steps.retry_deployment.outcome == 'failure'
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT }}
+      - name: Verify public download link
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(sed -n 's/.*id="download"[^>]*href="\([^"]*\)".*/\1/p' docs/index.html)
+          test -n "$expected"
+          for attempt in $(seq 1 15); do
+            if curl --fail --silent --show-error --location --max-time 20 "https://efac000.github.io/software-dedicado-/?verify=$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/public-site.html" && grep -Fq "$expected" "$RUNNER_TEMP/public-site.html"; then
+              echo "PUBLIC_SITE_DOWNLOAD_PASS $expected"
+              exit 0
+            fi
+            sleep 8
+          done
+          echo "::error::The public page does not yet contain the expected download."
+          exit 1
