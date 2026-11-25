@@ -20,6 +20,29 @@ try{
     Check(plan.Ids.SequenceEqual(new[]{"42"}),"IDs");
     Check(plan.Shards[0].Old.SequenceEqual(new[]{"99"}),"Mods anteriores");
     Check(File.ReadAllText(Path.Combine(t.Path,"Master","modoverrides.lua")).Contains("99"),"Simulação modificou destino");
+    var original=File.ReadAllText(Path.Combine(t.Path,"Master","modoverrides.lua"));
+    var save=Path.Combine(t.Path,"Master","save");Directory.CreateDirectory(save);File.WriteAllText(Path.Combine(save,"world"),"save-intacto");
+    var oldCache=Path.Combine(install,"mods","workshop-99");Directory.CreateDirectory(oldCache);File.WriteAllText(Path.Combine(oldCache,"modinfo.lua"),"old");
+    var unrelated=Path.Combine(install,"mods","workshop-555");Directory.CreateDirectory(unrelated);File.WriteAllText(Path.Combine(unrelated,"modinfo.lua"),"unrelated");
+    var backups=Path.Combine(root,"backups");
+    // Failed updater writes a partial V2 folder but no modinfo; actual transaction must roll back.
+    Reject(()=>Engine.Run(plan,_=>{},backups,()=>{},(_,_,ugc,_,_)=>{Directory.CreateDirectory(Path.Combine(ugc,"content","322330","42"));}));
+    Check(File.ReadAllText(Path.Combine(t.Path,"Master","modoverrides.lua"))==original,"Rollback não restaurou overrides");
+    Check(File.Exists(Path.Combine(oldCache,"modinfo.lua")),"Rollback não restaurou cache");
+    Check(!Directory.Exists(Path.Combine(install,"ugc_mods","Cluster_2","Master")),"Cache parcial permaneceu");
+    Check(!File.Exists(Path.Combine(install,"mods","dedicated_server_mods_setup.lua")),"Setup novo permaneceu");
+    Check(File.ReadAllText(Path.Combine(save,"world"))=="save-intacto","Save alterado");
+    var completed=Engine.Run(plan,_=>{},backups,()=>{},(_,_,ugc,_,_)=>{
+        var dir=Path.Combine(ugc,"content","322330","42");Directory.CreateDirectory(dir);File.WriteAllText(Path.Combine(dir,"modinfo.lua"),"name='Teste'");
+    });
+    Check(File.Exists(Path.Combine(completed,"cluster","Master","save","world")),"Backup não preservou save");
+    Check(File.Exists(Path.Combine(unrelated,"modinfo.lua")),"Cache não relacionado alterado");
+    Check(File.ReadAllText(Path.Combine(t.Path,"Master","modoverrides.lua")).Contains("42"),"Configuração não aplicada");
+    Check(File.ReadAllText(Path.Combine(install,"mods","dedicated_server_mods_setup.lua")).Contains("ServerModSetup(\"42\")"),"Setup inválido");
+    Check(File.ReadAllText(Path.Combine(save,"world"))=="save-intacto","Save alterado após sucesso");
+    var other=Path.Combine(install,"ugc_mods","Cluster_3","Master");Directory.CreateDirectory(other);
+    Reject(()=>Engine.Run(Engine.Analyze(s,t,install),_=>{},backups,()=>{},(_,_,_,_,_)=>{}));
+    Directory.Delete(other,true);Directory.Delete(Path.GetDirectoryName(other)!);
     World("1","return { ['workshop-43']={enabled=true} }");
     Check(plan.Fingerprint!=Engine.Analyze(Engine.Load(conf,"1"),t,install).Fingerprint,"Plano não invalidado");
 }finally{Directory.Delete(root,true);}

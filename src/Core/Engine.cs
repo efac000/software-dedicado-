@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("CoreTests")]
 namespace Dedicado;
 public record Cluster(string Path,string Name,string Number,string[] Shards);
 public record ShardPlan(string Name,byte[] Content,string[] Wanted,string[] Old);
@@ -79,27 +80,32 @@ public static class Engine {
         if(FileHash(path)!=Hash(data))throw new IOException("Falha na conferência de "+path);
     }
     static void SafeTree(string path){SafePath(path);foreach(var f in Directory.GetFiles(path))SafePath(f);foreach(var d in Directory.GetDirectories(path))SafeTree(d);}
-    public static async Task<string> Apply(Plan plan,Action<string> log){
+    public static Task<string> Apply(Plan plan,Action<string> log){
         using var gate=new Mutex(false,"Local\\GerenciadorDeDedicadoReset");
         if(!gate.WaitOne(0))throw new IOException("Outra manutenção em andamento.");
         // All work on this same thread: mutex ownership must not migrate across await.
-        try{return Run(plan,log);}finally{gate.ReleaseMutex();}
+        try{return Task.FromResult(Run(plan,log,Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Gerenciador de Dedicado","Backups"),Offline,UpdateShard));}finally{gate.ReleaseMutex();}
     }
-    static string Run(Plan plan,Action<string> log){
-        Offline();
+    internal static string Run(Plan plan,Action<string> log,string backupBase,Action offline,Action<Plan,ShardPlan,string,string,Action<string>> update){
+        offline();
         var source=Load(System.IO.Path.GetDirectoryName(plan.Source.Path)!,plan.Source.Number);
         var target=Load(System.IO.Path.GetDirectoryName(plan.Target.Path)!,plan.Target.Number);
         var fresh=Analyze(source,target,plan.Install);
         if(fresh.Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram; analise e confirme novamente.");
         var id=DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8];
-        var backup=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Gerenciador de Dedicado","Backups",id);
+        plan=fresh;
+        var backup=Path.Combine(backupBase,id);
         var quarantine=System.IO.Path.Combine(plan.Install,"GDD-quarentena",id);
         SafePath(backup);SafePath(quarantine);
         if(backup.StartsWith(target.Path+System.IO.Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new IOException("Backup dentro do cluster.");
         var mods=System.IO.Path.Combine(plan.Install,"mods");var setup=System.IO.Path.Combine(mods,"dedicated_server_mods_setup.lua");
         var ugc=System.IO.Path.Combine(plan.Install,"ugc_mods","Cluster_"+target.Number);
         SafePath(ugc);
-        var caches=Directory.GetDirectories(mods,"workshop-*").Where(x=>Regex.IsMatch(System.IO.Path.GetFileName(x)!,@"\Aworkshop-[0-9]+\z")).Concat(target.Shards.Select(s=>System.IO.Path.Combine(ugc,s)).Where(Directory.Exists)).ToArray();
+        var affected=plan.Shards.SelectMany(s=>s.Old.Concat(s.Wanted)).Distinct().ToHashSet(StringComparer.Ordinal);
+        var ugcRoot=Path.GetDirectoryName(ugc)!;SafePath(ugcRoot);
+        if(Directory.Exists(ugcRoot)&&Directory.GetDirectories(ugcRoot).Any(d=>!string.Equals(Path.GetFileName(d),"Cluster_"+target.Number,StringComparison.OrdinalIgnoreCase)))throw new IOException("Há caches UGC de outros clusters nesta instalação; reset bloqueado.");
+        if(Directory.Exists(ugc)&&Directory.GetDirectories(ugc).Any(d=>!target.Shards.Contains(Path.GetFileName(d),StringComparer.OrdinalIgnoreCase)))throw new IOException("Há outros shards UGC; reset bloqueado.");
+        var caches=Directory.GetDirectories(mods,"workshop-*").Where(x=>affected.Contains(Path.GetFileName(x)[9..])).Concat(target.Shards.Select(s=>Path.Combine(ugc,s)).Where(Directory.Exists)).ToArray();
         foreach(var p in caches)SafeTree(p);
         // Snapshot every changed file and full destination before any mutation.
         Directory.CreateDirectory(backup);log("Backup: "+backup);CopyTree(target.Path,System.IO.Path.Combine(backup,"cluster"));
@@ -110,30 +116,20 @@ public static class Engine {
         var touched=new List<string>();
         var journal=System.IO.Path.Combine(backup,"recovery.txt");
         File.WriteAllLines(journal,new[]{"Origem: "+source.Path,"Destino: "+target.Path,"Instalação: "+plan.Install,"Quarentena: "+quarantine,"Setup anterior: "+(originals[setup]!=null?"presente":"ausente")}.Concat(caches.Select((x,i)=>x+" -> "+System.IO.Path.Combine(quarantine,i.ToString()))));
-        Offline();
+        offline();
+        if(Analyze(Load(Path.GetDirectoryName(source.Path)!,source.Number),Load(Path.GetDirectoryName(target.Path)!,target.Number),plan.Install).Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram durante o backup; nenhuma manutenção executada.");
+        var newPaths=affected.Select(x=>Path.Combine(mods,"workshop-"+x)).Concat(target.Shards.Select(s=>Path.Combine(ugc,s))).Where(p=>!Directory.Exists(p)).ToArray();
         try{
             foreach(var p in caches){var q=System.IO.Path.Combine(quarantine,moved.Count.ToString());Directory.Move(p,q);moved.Add((p,q));}
             foreach(var s in plan.Shards){var p=Override(target,s.Name);touched.Add(p);Atomic(p,s.Content);}
             touched.Add(setup);Atomic(setup,Utf8.GetBytes("-- Gerenciador de Dedicado 1.0.0\n"+string.Join("\n",plan.Ids.Select(x=>"ServerModSetup(\""+x+"\")"))+"\n"));
-            foreach(var s in plan.Shards){
-                Offline();var ugcShard=System.IO.Path.Combine(ugc,s.Name);SafePath(ugcShard);
-                var start=new ProcessStartInfo(plan.Exe){WorkingDirectory=System.IO.Path.GetDirectoryName(plan.Exe)!,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true};
-                var conf=System.IO.Path.GetDirectoryName(target.Path)!;var storage=System.IO.Path.GetDirectoryName(conf)??throw new IOException("Caminho de cluster inválido.");
-                foreach(var arg in new[]{"-persistent_storage_root",storage,"-conf_dir",System.IO.Path.GetFileName(conf)!,"-cluster","Cluster_"+target.Number,"-shard",s.Name,"-ugc_directory",ugcShard,"-only_update_server_mods"})start.ArgumentList.Add(arg);
-                log("Atualizando "+s.Name+"...");using var proc=Process.Start(start)??throw new IOException("Falha ao iniciar atualizador.");
-                var output=proc.StandardOutput.ReadToEndAsync();var errors=proc.StandardError.ReadToEndAsync();
-                if(!proc.WaitForExit(30*60*1000)){proc.Kill(true);proc.WaitForExit();throw new IOException("Tempo limite do atualizador excedido.");}
-                var report=output.GetAwaiter().GetResult()+"\n"+errors.GetAwaiter().GetResult();
-                File.WriteAllText(System.IO.Path.Combine(backup,s.Name+"-update.log"),report);
-                if(proc.ExitCode!=0||Regex.IsMatch(report,@"(?im)(#ERROR:|failed to (download|install|update)|error downloading|workshop.*timed out)"))throw new IOException("Atualizador informou falha em "+s.Name+".");
+            foreach(var s in plan.Shards.OrderBy(s=>s.Name=="Master"?0:1)){
+                offline();var ugcShard=Path.Combine(ugc,s.Name);SafePath(ugcShard);
+                update(plan,s,ugcShard,backup,log);
                 foreach(var mod in s.Wanted){
-                    var v1=System.IO.Path.Combine(mods,"workshop-"+mod,"modinfo.lua");
-                    bool found=File.Exists(v1);
-                    if(!found&&Directory.Exists(ugcShard)){
-                        SafeTree(ugcShard);
-                        found=Directory.EnumerateDirectories(ugcShard,"*",SearchOption.AllDirectories).Any(d=>System.IO.Path.GetFileName(d)==mod||System.IO.Path.GetFileName(d)=="workshop-"+mod);
-                    }
-                    if(!found)throw new IOException("Não foi possível confirmar os arquivos do mod "+mod+" em "+s.Name+".");
+                    var v1=Path.Combine(mods,"workshop-"+mod);
+                    var v2=Path.Combine(ugcShard,"content","322330",mod);
+                    if(!HasMod(v1)&&!HasMod(v2))throw new IOException("Arquivos do mod "+mod+" não confirmados em "+s.Name+".");
                 }
             }
             File.AppendAllText(journal,"\nAtualizadores concluídos; confirme logs e teste mundo manualmente.");
@@ -141,11 +137,30 @@ public static class Engine {
         }catch(Exception error){
             log("Falha: "+error.Message+"; tentando restaurar.");
             var rollbackErrors=new List<string>();
-            try{Offline();}catch{throw new IOException("Processos ainda em execução. Não foi feita restauração automática. Backup: "+backup,error);}
+            try{offline();}catch{throw new IOException("Processos ainda em execução. Não foi feita restauração automática. Backup: "+backup,error);}
             foreach(var p in touched.AsEnumerable().Reverse())try{if(originals[p] is byte[] b)Atomic(p,b);else if(File.Exists(p))File.Delete(p);}catch(Exception ex){rollbackErrors.Add(p+": "+ex.Message);}
-            foreach(var (p,q) in moved.AsEnumerable().Reverse())try{if(Directory.Exists(p))Directory.Move(p,System.IO.Path.Combine(quarantine,"novo-"+Guid.NewGuid().ToString("N")));Directory.Move(q,p);}catch(Exception ex){rollbackErrors.Add(p+": "+ex.Message);}
+            foreach(var p in newPaths)try{if(Directory.Exists(p)){SafeTree(p);Directory.Move(p,Path.Combine(quarantine,"novo-"+Guid.NewGuid().ToString("N")));}}catch(Exception ex){rollbackErrors.Add(p+": "+ex.Message);}
+            foreach(var (p,q) in moved.AsEnumerable().Reverse())try{if(Directory.Exists(p)){SafeTree(p);Directory.Move(p,System.IO.Path.Combine(quarantine,"novo-"+Guid.NewGuid().ToString("N")));}Directory.Move(q,p);}catch(Exception ex){rollbackErrors.Add(p+": "+ex.Message);}
             File.AppendAllText(journal,"\nFalha: "+error.Message+"\n"+string.Join("\n",rollbackErrors));
-            throw new IOException("Manutenção interrompida. "+(rollbackErrors.Count==0?"Configurações e caches antigos movidos foram restaurados; novos caches sem equivalente podem permanecer.":"Restauração incompleta; consulte recovery.txt.")+" Backup: "+backup,error);
+            throw new IOException("Manutenção interrompida. "+(rollbackErrors.Count==0?"Configurações e caches afetados foram restaurados; verifique o relatório e o mundo antes de iniciar.":"Restauração incompleta; consulte recovery.txt.")+" Backup: "+backup,error);
         }
+    }
+    internal static bool HasMod(string dir){
+        SafePath(dir);
+        if(!Directory.Exists(dir))return false;
+        var info=Path.Combine(dir,"modinfo.lua");SafePath(info);
+        return File.Exists(info)&&new FileInfo(info).Length>0;
+    }
+    static void UpdateShard(Plan plan,ShardPlan s,string ugcShard,string backup,Action<string> log){
+        var start=new ProcessStartInfo(plan.Exe){WorkingDirectory=Path.GetDirectoryName(plan.Exe)!,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true};
+        var conf=Path.GetDirectoryName(plan.Target.Path)!;var storage=Path.GetDirectoryName(conf)??throw new IOException("Caminho de cluster inválido.");
+        foreach(var arg in new[]{"-persistent_storage_root",storage,"-conf_dir",Path.GetFileName(conf)!,"-cluster","Cluster_"+plan.Target.Number,"-shard",s.Name,"-ugc_directory",ugcShard,"-only_update_server_mods"})start.ArgumentList.Add(arg);
+        log("Atualizando "+s.Name+"...");using var proc=Process.Start(start)??throw new IOException("Falha ao iniciar atualizador.");
+        var output=proc.StandardOutput.ReadToEndAsync();var errors=proc.StandardError.ReadToEndAsync();
+        bool timeout=!proc.WaitForExit(30*60*1000);
+        if(timeout){proc.Kill(true);if(!proc.WaitForExit(10000))throw new IOException("Atualizador não encerrou após o limite.");}
+        var report=output.GetAwaiter().GetResult()+"\n"+errors.GetAwaiter().GetResult();
+        File.WriteAllText(Path.Combine(backup,s.Name+"-update.log"),report);
+        if(timeout||proc.ExitCode!=0||Regex.IsMatch(report,@"(?im)(#ERROR:|failed to (download|install|update)|error downloading|workshop.*timed out)"))throw new IOException("Atualizador informou falha ou excedeu o limite em "+s.Name+".");
     }
 }

@@ -1,5 +1,13 @@
 # Histórico
 
+## 1.0.0 — revisão de segurança
+
+- Verificação de modinfo.lua no layout V2 documentado; a pasta vazia não conta como download.
+- Quarentena V1 limitada aos IDs afetados; bloqueio de outros caches UGC.
+- Restauração de caches parciais e conferência do plano após backup.
+- Testes de integração em clusters fictícios, incluindo falha simulada e save preservado.
+- Link permanente da página de releases e melhorias no site.
+
 ## 1.0.0 — revisão candidata inicial
 
 - Interface Windows, seleção de clusters e comparação por shard.
