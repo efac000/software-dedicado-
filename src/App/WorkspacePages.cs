@@ -10,7 +10,13 @@ sealed partial class MainForm{
     Button? taskPageCancel;
     Label? taskPageStatus;
     string? lastActivityMessage;
+    void EnsureUiContext(){
+        if(InvokeRequired)throw new InvalidOperationException("A tarefa visual exige a thread da interface.");
+        if(System.Threading.SynchronizationContext.Current is not WindowsFormsSynchronizationContext)
+            System.Threading.SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+    }
     async Task<bool> ShowTaskPage(string section,Control content,int width,int height,Button cancel){
+        EnsureUiContext();
         if(!busy||taskPageResult!=null)throw new InvalidOperationException("Área de trabalho ocupada.");
         var completion=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);taskPageResult=completion;taskPageCancel=cancel;
         HideInternalPage();homeHost!.Visible=false;mainHost!.Visible=false;

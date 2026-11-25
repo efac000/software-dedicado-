@@ -270,6 +270,7 @@ sealed partial class MainForm:Form{
         if(ended){lastActivityMessage=status.Text;RefreshActivity();if(!smokeMode)RecordActivity();}
     }
     async Task Diagnose(){
+        EnsureUiContext();
         var cluster=target.SelectedItem is Cluster c?c.Path:destinationRoot.Text;
         if(target.SelectedItem is not Cluster&&!File.Exists(Path.Combine(cluster,"cluster.ini"))){
             using var picker=new FolderBrowserDialog{Description="Selecione a pasta do cluster a diagnosticar (mesmo incompleto)"};
@@ -353,6 +354,7 @@ sealed partial class MainForm:Form{
         }
     }
     async Task Analyze(){
+        EnsureUiContext();
         InvalidatePlan();
 
         if(target.SelectedItem is not Cluster b||(!InPlace&&source.SelectedItem is not Cluster)){
@@ -572,8 +574,9 @@ sealed partial class MainForm:Form{
         Busy(true);try{status.Text="Aplicando plano aprovado (backup, caches e atualização dos shards)";var result=await Task.Run(()=>Engine.Apply(p,Write));Write("Atualizadores concluídos. Backup: "+result);Write("Confira os logs e teste a entrada no mundo e nas cavernas. Não reiniciamos o servidor.");status.Text="Manutenção concluída; validação do mundo pendente.";}catch(Exception e){Write(e.Message);status.Text="Falha: leia o relatório antes de iniciar o mundo.";}finally{current=null;Busy(false);}
     }
     static void Open(string url){try{Process.Start(new ProcessStartInfo(url){UseShellExecute=true});}catch(Exception e){Notice.Show(e.Message);}}
-    string? backupRootOverride;
+    string? backupRootOverride=null;
     async Task OpenBackups(){
+        EnsureUiContext();
         if(busy)return;
         var rootPath=backupRootOverride??Recovery.DefaultRoot;Directory.CreateDirectory(rootPath);
         try{if(InterruptedMaintenance.Pending(rootPath).Length>0){await RecoverInterrupted(rootPath);return;}}catch(Exception ex){Write("Recuperação: "+ex.Message);return;}

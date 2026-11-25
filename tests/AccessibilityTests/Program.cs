@@ -6,7 +6,10 @@ static class AccessibilityTests{
     const BindingFlags Instance=BindingFlags.Instance|BindingFlags.NonPublic;
     static readonly Type FormType=Assembly.Load("Gerenciador-de-Dedicado").GetType("Gerenciador.MainForm",true)!;
     static T Field<T>(Form form,string name)=>(T)FormType.GetField(name,Instance)!.GetValue(form)!;
-    static object? Call(Form form,string name,params object?[] args)=>FormType.GetMethod(name,Instance)!.Invoke(form,args);
+    static object? Call(Form form,string name,params object?[] args){
+        if(System.Threading.SynchronizationContext.Current is not WindowsFormsSynchronizationContext)System.Threading.SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+        return FormType.GetMethod(name,Instance)!.Invoke(form,args);
+    }
     static void Assert(bool pass,string message){if(!pass)throw new Exception(message);}
     static void WaitFor(Func<bool> done,string message){var clock=System.Diagnostics.Stopwatch.StartNew();while(!done()&&clock.ElapsedMilliseconds<5000){Application.DoEvents();System.Threading.Thread.Sleep(5);}Assert(done(),message);}
     static void Capture(Form form,string name){
