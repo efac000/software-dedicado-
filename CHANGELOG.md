@@ -29,3 +29,8 @@ Validação de uma instalação DST real ainda necessária.
 - Editor literal Master/Caves com revisão e confirmação; detecção de alterações concorrentes.
 - Consulta local de nomes em caches V1 e V2; logs do atualizador gravados em fluxo.
 - Proteção do setup global contra registros externos ao plano.
+
+## Revisão visual — 1.0.0
+- Catálogo de mods por shard, filtro por nome/ID e prévia original Steam Workshop.
+- Inclusão por ID/link e ativação/desativação sem editar Lua; preserva opções existentes.
+- Primeiro mod em cluster sem modoverrides.lua, detecção adicional de caminhos e seleção direta de cluster.

@@ -8,12 +8,25 @@ Check(mods.Keys.SequenceEqual(new[]{"123"}),"Leitura incorreta");
 Check(Lua.Active("return { -- comentario\n ['workshop-42'] = { enabled=true } }").ContainsKey("42"),"Comentários/aspas");
 Check(Lua.Active("return { --[=[ comentario ]=]\n ['workshop-42'] = { enabled=true, configuration_options={ text=[=[literal }]=] } } }").ContainsKey("42"),"Comentário longo");
 Reject(()=>Lua.Active("return os.execute('x')"));Reject(()=>Lua.Active("return { ['workshop-1']={enabled=foo()} }"));Reject(()=>Lua.Active("return { ['local']={enabled=true} }"));Reject(()=>Lua.Active("return { ['workshop-1']={enabled=true,enabled=false} }"));Reject(()=>Lua.Active("return {} print('x')"));Reject(()=>Lua.Active("return { ['workshop-99999999999999999999']={enabled=true} }"));
+// Workshop input and token-preserving visual edits.
+Check(WorkshopId.TryParse("https://steamcommunity.com/sharedfiles/filedetails/?id=42",out var parsed)&&parsed=="42","Link Workshop");
+foreach(var invalid in new[]{"0","1a2","https://example.com/sharedfiles/filedetails/?id=42","https://steamcommunity.com/sharedfiles/filedetails/?id=42&id=43","https://steamcommunity.com/sharedfiles/filedetails/?id=18446744073709551616"})Check(!WorkshopId.TryParse(invalid,out _),"ID inválido aceito");
+var originalLua="return { ['workshop-42']={configuration_options={enabled=false,text='}'},enabled=true} -- comentario\n}";
+var disabled=Lua.SetEnabled(originalLua,"42",false);
+Check(disabled==originalLua.Replace("enabled=true","enabled=false")&&!Lua.Entries(disabled)["42"],"Opções alteradas ao desativar");
+Check(Lua.SetEnabled(disabled,"42",true)==originalLua,"Reativação perdeu opções");
+var added=Lua.SetEnabled(originalLua,"43",true);
+Check(Lua.Active(added).Count==2&&Lua.Active(added).ContainsKey("43"),"Inclusão sem separador");
+Check(Lua.Active(Lua.SetEnabled("return {}", "44",true)).ContainsKey("44"),"Inclusão em lista vazia");
+Check(Lua.Active(Lua.SetEnabled("return {['workshop-42']={enabled=true},}", "43",true)).Count==2,"Inclusão com separador");
+Reject(()=>Lua.Active("return {} --[[ comentario sem fim"));
 var root=Path.Combine(Path.GetTempPath(),"GDD-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
 try{
     var conf=Path.Combine(root,"Klei","DST");Directory.CreateDirectory(conf);
     void World(string n,string data){var p=Path.Combine(conf,"Cluster_"+n);Directory.CreateDirectory(Path.Combine(p,"Master"));File.WriteAllText(Path.Combine(p,"cluster.ini"),"cluster_name = Teste "+n);File.WriteAllText(Path.Combine(p,"Master","server.ini"),"[SHARD]\nis_master = true");File.WriteAllText(Path.Combine(p,"Master","modoverrides.lua"),data);}
     World("1","return { ['workshop-42']={enabled=true} }");World("2","return { ['workshop-99']={enabled=true} }");
     var account=Path.Combine(conf,"123456789");Directory.CreateDirectory(account);var accountCluster=Path.Combine(account,"Cluster_1");Directory.CreateDirectory(Path.Combine(accountCluster,"Master"));File.WriteAllText(Path.Combine(accountCluster,"cluster.ini"),"cluster_name = Cópia com acento");File.WriteAllText(Path.Combine(accountCluster,"Master","server.ini"),"[SHARD]");File.WriteAllText(Path.Combine(accountCluster,"Master","modoverrides.lua"),"return {}");
+    Check(Engine.Discover(accountCluster).Length==1,"Seleção direta de cluster");
     Check(Engine.Discover(conf).Length==3,"Detecção de contas");Check(Engine.Discover(conf).Count(c=>c.Number=="1")==2,"Clusters de mesmo número não podem ser confundidos");Check(Engine.Discover("").Length==0,"Pasta vazia");
     Reject(()=>Engine.Load(conf,"9"));Reject(()=>Engine.Load(conf,"1a"));
     var install=Path.Combine(root,"install");Directory.CreateDirectory(Path.Combine(install,"bin64"));Directory.CreateDirectory(Path.Combine(install,"mods"));File.WriteAllText(Path.Combine(install,"bin64","dontstarve_dedicated_server_nullrenderer_x64.exe"),"fake");
@@ -76,6 +89,17 @@ try{
 
     Check(plan.Fingerprint!=Engine.Analyze(Engine.Load(conf,"1"),t,install).Fingerprint,"Plano não invalidado");
     // Repair the dedicated cluster in place; the normal copy path still rejects same source/destination.
+    var blank=Engine.Load(account,"1");var blankOverride=Path.Combine(blank.Path,"Master","modoverrides.lua");
+    File.Delete(blankOverride);
+    Reject(()=>Engine.AnalyzeRepair(blank,install));
+    // Existing setup belongs to t; it must not be overwritten by a different cluster.
+    Reject(()=>Engine.AnalyzeEditBaseline(blank,install));
+    var savedSetup=File.ReadAllBytes(setupFile);File.Delete(setupFile);
+    var empty=Engine.AnalyzeEditBaseline(blank,install);
+    Check(empty.Ids.Length==0&&!File.Exists(blankOverride),"Baseline vazio escreveu arquivo");
+    var newPlan=Engine.AnalyzeRepair(blank,install,new Dictionary<string,byte[]>{{"Master",System.Text.Encoding.UTF8.GetBytes(Lua.SetEnabled("return {}","44",true))}},empty.Fingerprint);
+    Check(newPlan.Ids.SequenceEqual(new[]{"44"})&&!File.Exists(blankOverride),"Primeiro mod exige mundo temporário");
+    File.WriteAllBytes(setupFile,savedSetup);
     var repair=Engine.AnalyzeRepair(t,install);
     var beforeRepair=File.ReadAllBytes(overridePath);
     Check(repair.InPlace&&!repair.Edited&&repair.Ids.SequenceEqual(new[]{"42"}),"Plano de reparo inválido");
