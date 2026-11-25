@@ -2,6 +2,9 @@ using Dedicado;
 static void Check(bool b,string message){if(!b)throw new Exception(message);}
 static void Reject(Action f){try{f();}catch(ArgumentException){return;}catch(FormatException){return;}catch(IOException){return;}throw new Exception("Entrada inválida aceita");}
 SteamUpdateTests.Run();
+LuaOptionTests.Run();
+WorkshopSearchTests.Run();
+DependencyTests.Run();
 SteamBootstrapTests.Run();
 InterruptedTests.Run();
 foreach(var x in new[]{"","0","-1","1a2","1.5"," 1","1 ","01","١","9999999999","1\n"})Check(!Engine.ValidNumber(x),"Número inválido: "+x);
@@ -12,6 +15,7 @@ Check(Lua.Active("return { -- comentario\n ['workshop-42'] = { enabled=true } }"
 Check(Lua.Active("return { --[=[ comentario ]=]\n ['workshop-42'] = { enabled=true, configuration_options={ text=[=[literal }]=] } } }").ContainsKey("42"),"Comentário longo");
 Reject(()=>Lua.Active("return os.execute('x')"));Reject(()=>Lua.Active("return { ['workshop-1']={enabled=foo()} }"));Reject(()=>Lua.Active("return { ['local']={enabled=true} }"));Reject(()=>Lua.Active("return { ['workshop-1']={enabled=true,enabled=false} }"));Reject(()=>Lua.Active("return {} print('x')"));Reject(()=>Lua.Active("return { ['workshop-99999999999999999999']={enabled=true} }"));
 // Workshop input and token-preserving visual edits.
+Check(WorkshopId.SearchUri("  A & B   ")=="https://steamcommunity.com/workshop/browse/?appid=322330&searchtext=A%20%26%20B","Busca Workshop com separadores");
 Check(WorkshopId.TryParse("https://steamcommunity.com/sharedfiles/filedetails/?id=42",out var parsed)&&parsed=="42","Link Workshop");
 foreach(var invalid in new[]{"0","1a2","https://example.com/sharedfiles/filedetails/?id=42","https://steamcommunity.com/sharedfiles/filedetails/?id=42&id=43","https://steamcommunity.com/sharedfiles/filedetails/?id=18446744073709551616"})Check(!WorkshopId.TryParse(invalid,out _),"ID inválido aceito");
 var originalLua="return { ['workshop-42']={configuration_options={enabled=false,text='}'},enabled=true} -- comentario\n}";
@@ -31,9 +35,28 @@ try{
     var account=Path.Combine(conf,"123456789");Directory.CreateDirectory(account);var accountCluster=Path.Combine(account,"Cluster_1");Directory.CreateDirectory(Path.Combine(accountCluster,"Master"));File.WriteAllText(Path.Combine(accountCluster,"cluster.ini"),"cluster_name = Cópia com acento");File.WriteAllText(Path.Combine(accountCluster,"Master","server.ini"),"[SHARD]");File.WriteAllText(Path.Combine(accountCluster,"Master","modoverrides.lua"),"return {}");
     Check(Engine.Discover(accountCluster).Length==1,"Seleção direta de cluster");
     Check(Engine.Discover(conf).Length==3,"Detecção de contas");Check(Engine.Discover(conf).Count(c=>c.Number=="1")==2,"Clusters de mesmo número não podem ser confundidos");Check(Engine.Discover("").Length==0,"Pasta vazia");
+    var customFolder=Path.Combine(conf,"Mundo QA");
+    Directory.CreateDirectory(Path.Combine(customFolder,"Master"));
+    File.WriteAllText(Path.Combine(customFolder,"cluster.ini"),"cluster_name = Mundo personalizado");
+    File.WriteAllText(Path.Combine(customFolder,"Master","server.ini"),"[SHARD]");
+    var custom=Engine.Discover(customFolder).Single();
+    Check(custom.FolderName=="Mundo QA"&&custom.Path==customFolder,"Nome de pasta personalizado");
+    Check(Engine.Discover(conf).Any(c=>c.Path==customFolder),"Busca omitiu mundo personalizado");
+    Check(!Engine.ValidClusterFolder("Cluster_01")&&!Engine.ValidClusterFolder("..")&&!Engine.ValidClusterFolder("trailing."),"Pasta insegura ou ambígua aceita");
     Reject(()=>Engine.Load(conf,"9"));Reject(()=>Engine.Load(conf,"1a"));
     var install=Path.Combine(root,"install");Directory.CreateDirectory(Path.Combine(install,"bin64"));Directory.CreateDirectory(Path.Combine(install,"mods"));File.WriteAllText(Path.Combine(install,"bin64","dontstarve_dedicated_server_nullrenderer_x64.exe"),"fake");
     var s=Engine.Load(conf,"1");var t=Engine.Load(conf,"2");
+    var customPlan=Engine.Analyze(s,custom,install);
+    var customBackup=Engine.Run(customPlan,_=>{},Path.Combine(root,"custom-backups"),()=>{},(_,_,ugc,_,_)=>{
+        Check(ugc==Path.Combine(install,"ugc_mods","Mundo QA","Master"),"Cache apontou para outro cluster");
+        var cache=Path.Combine(ugc,"content","322330","42");
+        Directory.CreateDirectory(cache);
+        File.WriteAllText(Path.Combine(cache,"modinfo.lua"),"name='QA'");
+    });
+    Check(File.Exists(Path.Combine(customBackup,"configuration-recovery.json")),"Backup de cluster personalizado ausente");
+    Directory.Delete(Path.Combine(install,"ugc_mods"),true);
+    File.Delete(Path.Combine(install,"mods","dedicated_server_mods_setup.lua"));
+
     Reject(()=>Engine.Analyze(s,s,install));var plan=Engine.Analyze(s,t,install);
     // A global setup may service another world; never silently replace unrelated entries.
     var setupFile=Path.Combine(install,"mods","dedicated_server_mods_setup.lua");

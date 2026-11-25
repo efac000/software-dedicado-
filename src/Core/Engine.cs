@@ -5,7 +5,8 @@ using System.Text.RegularExpressions;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("CoreTests")]
 namespace Dedicado;
 public record Cluster(string Path,string Name,string Number,string[] Shards) {
-    public override string ToString()=> $"Cluster_{Number} — {Name} ({System.IO.Path.GetDirectoryName(Path)})";
+    public string FolderName=>System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(Path));
+    public override string ToString()=> $"{FolderName} — {Name} ({System.IO.Path.GetDirectoryName(Path)})";
 }
 public record ShardPlan(string Name,byte[] Content,string[] Wanted,string[] Old);
 public record Plan(Cluster Source,Cluster Target,string Install,string Exe,ShardPlan[] Shards,string Fingerprint,bool InPlace=false,bool Edited=false) {
@@ -21,11 +22,24 @@ public static class Engine {
             if((File.Exists(x)||Directory.Exists(x)) && File.GetAttributes(x).HasFlag(FileAttributes.ReparsePoint))throw new IOException("Link/junção não suportado: "+x);
         }
     }
+    public static bool ValidClusterFolder(string name){
+        if(name.StartsWith("Cluster_",StringComparison.OrdinalIgnoreCase))return ValidNumber(name[8..]);
+        return Regex.IsMatch(name,@"\A[\p{L}\p{Nd}][\p{L}\p{Nd} _.-]{0,63}\z")
+            &&!name.EndsWith('.')&&!name.EndsWith(' ');
+    }
     public static Cluster Load(string root,string number){
         if(!ValidNumber(number))throw new ArgumentException("Digite somente um número inteiro positivo existente.");
-        var p=System.IO.Path.GetFullPath(System.IO.Path.Combine(root,"Cluster_"+number)); SafePath(p);
-        var ini=System.IO.Path.Combine(p,"cluster.ini");
-        if(!File.Exists(ini))throw new DirectoryNotFoundException("Cluster_"+number+" não encontrado ou sem cluster.ini.");
+        return LoadClusterDirectory(System.IO.Path.GetFullPath(System.IO.Path.Combine(root,"Cluster_"+number)));
+    }
+    public static Cluster LoadClusterDirectory(string path){
+        if(!Path.IsPathFullyQualified(path))throw new IOException("Caminho do cluster inválido.");
+        var p=Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var folder=Path.GetFileName(p);
+        if(!ValidClusterFolder(folder))throw new IOException("Nome da pasta do cluster não suportado.");
+        SafePath(p);
+        var number=folder.StartsWith("Cluster_",StringComparison.OrdinalIgnoreCase)?folder[8..]:folder;
+        var ini=Path.Combine(p,"cluster.ini");
+        if(!File.Exists(ini))throw new DirectoryNotFoundException(folder+" não encontrado ou sem cluster.ini.");
         SafePath(ini);
         var shards=Directory.GetDirectories(p).Where(x=>File.Exists(System.IO.Path.Combine(x,"server.ini"))).Select(x=>System.IO.Path.GetFileName(x)!).Order().ToArray();
         if(!shards.Contains("Master")||shards.Any(x=>x!="Master"&&x!="Caves"))throw new IOException("Apenas Master e Caves convencionais são suportados.");
@@ -37,13 +51,20 @@ public static class Engine {
         if(string.IsNullOrWhiteSpace(root)||!Directory.Exists(root))return [];
         SafePath(root);
         var rootName=Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
-        if(rootName.StartsWith("Cluster_",StringComparison.Ordinal)&&ValidNumber(rootName[8..]))
-            return new[]{Load(Path.GetDirectoryName(Path.GetFullPath(root))!,rootName[8..])};
+        if(File.Exists(Path.Combine(root,"cluster.ini"))||(rootName.StartsWith("Cluster_",StringComparison.OrdinalIgnoreCase)&&ValidNumber(rootName[8..])))
+            return new[]{LoadClusterDirectory(Path.GetFullPath(root))};
         var roots=new List<string>{root};
         foreach(var child in Directory.GetDirectories(root)){
             if(Regex.IsMatch(Path.GetFileName(child),@"\A[0-9]{1,20}\z"))try{SafePath(child);roots.Add(child);}catch(IOException){}
         }
-        return roots.SelectMany(r=>Numbers(r).Select(n=>Load(r,n))).OrderBy(c=>int.Parse(c.Number)).ThenBy(c=>c.Path,StringComparer.OrdinalIgnoreCase).ToArray();
+        var clusters=new List<Cluster>();
+        foreach(var folder in roots.SelectMany(Directory.EnumerateDirectories)){
+            if(!File.Exists(Path.Combine(folder,"cluster.ini")))continue;
+            try{clusters.Add(LoadClusterDirectory(Path.GetFullPath(folder)));}
+            catch(IOException){}
+        }
+        return clusters.OrderBy(c=>int.TryParse(c.Number,out var number)?number:int.MaxValue)
+            .ThenBy(c=>c.Path,StringComparer.OrdinalIgnoreCase).ToArray();
     }
     public static string[] Numbers(string root)=>Directory.Exists(root)?Directory.GetDirectories(root,"Cluster_*").Select(x=>System.IO.Path.GetFileName(x)![8..]).Where(ValidNumber).Where(n=>{try{Load(root,n);return true;}catch{return false;}}).OrderBy(x=>int.Parse(x)).ToArray():[];
     public static void Offline(){
@@ -170,8 +191,10 @@ public static class Engine {
     }
     internal static string Run(Plan plan,Action<string> log,string backupBase,Action offline,Action<Plan,ShardPlan,string,string,Action<string>> update){
         offline();InterruptedMaintenance.EnsureClear(backupBase);
-        var source=Load(System.IO.Path.GetDirectoryName(plan.Source.Path)!,plan.Source.Number);
-        var target=Load(System.IO.Path.GetDirectoryName(plan.Target.Path)!,plan.Target.Number);
+        if(SteamUpdate.Pending(backupBase).Length>0)
+            throw new IOException("Há uma atualização SteamCMD pendente. Retome-a antes de alterar os mods.");
+        var source=LoadClusterDirectory(plan.Source.Path);
+        var target=LoadClusterDirectory(plan.Target.Path);
         Plan Reanalyze(Plan p,Cluster a,Cluster b)=>p.InPlace?AnalyzeRepair(b,p.Install,p.Edited?p.Shards.ToDictionary(s=>s.Name,s=>s.Content):null):Analyze(a,b,p.Install);
         var fresh=Reanalyze(plan,source,target);
         if(fresh.Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram; analise e confirme novamente.");
@@ -182,11 +205,11 @@ public static class Engine {
         SafePath(backup);SafePath(quarantine);
         if(IsWithin(backup,target.Path)||IsWithin(backup,source.Path)||IsWithin(backup,plan.Install))throw new IOException("Backup dentro do cluster ou da instalação.");
         var mods=System.IO.Path.Combine(plan.Install,"mods");var setup=System.IO.Path.Combine(mods,"dedicated_server_mods_setup.lua");
-        var ugc=System.IO.Path.Combine(plan.Install,"ugc_mods","Cluster_"+target.Number);
+        var ugc=System.IO.Path.Combine(plan.Install,"ugc_mods",target.FolderName);
         SafePath(ugc);
         var affected=plan.Shards.SelectMany(s=>s.Old.Concat(s.Wanted)).Distinct().ToHashSet(StringComparer.Ordinal);
         var ugcRoot=Path.GetDirectoryName(ugc)!;SafePath(ugcRoot);
-        if(Directory.Exists(ugcRoot)&&Directory.GetDirectories(ugcRoot).Any(d=>!string.Equals(Path.GetFileName(d),"Cluster_"+target.Number,StringComparison.OrdinalIgnoreCase)))throw new IOException("Há caches UGC de outros clusters nesta instalação; reset bloqueado.");
+        if(Directory.Exists(ugcRoot)&&Directory.GetDirectories(ugcRoot).Any(d=>!string.Equals(Path.GetFileName(d),target.FolderName,StringComparison.OrdinalIgnoreCase)))throw new IOException("Há caches UGC de outros clusters nesta instalação; reset bloqueado.");
         if(Directory.Exists(ugc)&&Directory.GetDirectories(ugc).Any(d=>!target.Shards.Contains(Path.GetFileName(d),StringComparer.OrdinalIgnoreCase)))throw new IOException("Há outros shards UGC; reset bloqueado.");
         var caches=Directory.GetDirectories(mods,"workshop-*").Where(x=>affected.Contains(Path.GetFileName(x)[9..])).Concat(target.Shards.Select(s=>Path.Combine(ugc,s)).Where(Directory.Exists)).ToArray();
         foreach(var p in caches)SafeTree(p);
@@ -202,7 +225,7 @@ public static class Engine {
         var journal=System.IO.Path.Combine(backup,"recovery.txt");
         File.WriteAllLines(journal,new[]{"Origem: "+source.Path,"Destino: "+target.Path,"Instalação: "+plan.Install,"Quarentena: "+quarantine,"Setup anterior: "+(originals[setup]!=null?"presente":"ausente")}.Concat(caches.Select((x,i)=>x+" -> "+System.IO.Path.Combine(quarantine,i.ToString()))));
         offline();
-        if(Reanalyze(plan,Load(Path.GetDirectoryName(source.Path)!,source.Number),Load(Path.GetDirectoryName(target.Path)!,target.Number)).Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram durante o backup; nenhuma manutenção executada.");
+        if(Reanalyze(plan,LoadClusterDirectory(source.Path),LoadClusterDirectory(target.Path)).Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram durante o backup; nenhuma manutenção executada.");
         var newPaths=affected.Select(x=>Path.Combine(mods,"workshop-"+x)).Concat(target.Shards.Select(s=>Path.Combine(ugc,s))).Where(p=>!Directory.Exists(p)).ToArray();
         var nextSetup=Utf8.GetBytes("-- Gerenciador de Dedicado 1.0.0\n"+string.Join("\n",plan.Ids.Select(x=>"ServerModSetup(\""+x+"\")"))+"\n");
         InterruptedMaintenance.Begin(backup,plan,originals,nextSetup,caches,newPaths);
@@ -221,6 +244,7 @@ public static class Engine {
                     if(!HasMod(v1)&&!HasMod(v2)&&!HasMod(v2Direct))throw new IOException("Arquivos do mod "+mod+" não confirmados em "+s.Name+".");
                 }
             }
+            foreach(var warning in ModWarnings(plan))log(warning);
             File.AppendAllText(journal,"\nAtualizadores concluídos; confirme logs e teste mundo manualmente.");
             InterruptedMaintenance.Complete(backup,"completed");
             return backup;
@@ -242,25 +266,92 @@ public static class Engine {
         var info=Path.Combine(dir,"modinfo.lua");SafePath(info);
         return File.Exists(info)&&new FileInfo(info).Length>0;
     }
+    public static IEnumerable<string> ModInfoPaths(Plan plan,string shard,string id){
+        if(!plan.Target.Shards.Contains(shard)||!WorkshopId.TryParse(id,out var parsed)||parsed!=id)
+            throw new ArgumentException("Mod ou shard inválido.");
+        var ugc=Path.Combine(plan.Install,"ugc_mods",plan.Target.FolderName,shard);
+        yield return Path.Combine(plan.Install,"mods","workshop-"+id,"modinfo.lua");
+        yield return Path.Combine(ugc,"content","322330",id,"modinfo.lua");
+        yield return Path.Combine(ugc,"workshop-"+id,"modinfo.lua");
+    }
+    public static IEnumerable<string> ModWarnings(Plan plan,IReadOnlyDictionary<string,string[]>? workshop=null){
+        foreach(var shard in plan.Shards){
+            var entries=Lua.Entries(Utf8.GetString(shard.Content).TrimStart('\uFEFF'));
+            ModMetadata? Load(string id){
+                foreach(var path in ModInfoPaths(plan,shard.Name,id)){
+                    try{
+                        SafePath(path);
+                        if(File.Exists(path)&&new FileInfo(path).Length<=1_000_000){
+                            var metadata=Lua.GetModMetadata(File.ReadAllText(path));
+                            if(metadata!=null)return metadata;
+                        }
+                    }catch(IOException){}catch(UnauthorizedAccessException){}
+                }
+                return null;
+            }
+            foreach(var warning in DependencyAnalysis.Inspect(shard.Name,entries,Load,workshop))yield return warning;
+        }
+    }
     static void UpdateShard(Plan plan,ShardPlan s,string ugcShard,string backup,Action<string> log){
-        var start=new ProcessStartInfo(plan.Exe){WorkingDirectory=Path.GetDirectoryName(plan.Exe)!,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true};
-        var conf=Path.GetDirectoryName(plan.Target.Path)!;var storage=Path.GetDirectoryName(conf)??throw new IOException("Caminho de cluster inválido.");
-        foreach(var arg in new[]{"-persistent_storage_root",storage,"-conf_dir",Path.GetFileName(conf)!,"-cluster","Cluster_"+plan.Target.Number,"-shard",s.Name,"-ugc_directory",ugcShard,"-only_update_server_mods"})start.ArgumentList.Add(arg);
-        log("Atualizando "+s.Name+"...");using var proc=Process.Start(start)??throw new IOException("Falha ao iniciar atualizador.");
+        // Some dedicated builds can enter world startup after finishing the mod download.
+        // Keep every persisted game file for this process inside the backup directory.
+        var storage=Path.Combine(backup,"workshop-run-"+s.Name);
+        var cluster=Path.Combine(storage,"config","Cluster_1");
+        var shard=Path.Combine(cluster,s.Name);
+        SafePath(shard);
+        Directory.CreateDirectory(shard);
+        File.WriteAllText(Path.Combine(cluster,"cluster.ini"),"[NETWORK]\noffline_cluster = true\nlan_only_cluster = true\n");
+        File.WriteAllText(Path.Combine(shard,"server.ini"),"[SHARD]\nis_master = "+(s.Name=="Master"?"true":"false")+"\n");
 
-        // Stream directly to disk instead of accumulating both outputs in memory.
+        var start=new ProcessStartInfo(plan.Exe){
+            WorkingDirectory=Path.GetDirectoryName(plan.Exe)!,UseShellExecute=false,
+            RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true
+        };
+        foreach(var arg in new[]{"-persistent_storage_root",storage,"-conf_dir","config","-cluster","Cluster_1",
+            "-shard",s.Name,"-ugc_directory",ugcShard,"-only_update_server_mods"})start.ArgumentList.Add(arg);
+
         var outputPath=Path.Combine(backup,s.Name+"-update.log");
         var errorPath=Path.Combine(backup,s.Name+"-update.stderr.log");
-        bool timeout;
-        using(var outputFile=new FileStream(outputPath,FileMode.CreateNew,FileAccess.Write,FileShare.Read))
-        using(var errorFile=new FileStream(errorPath,FileMode.CreateNew,FileAccess.Write,FileShare.Read)){
-            var output=proc.StandardOutput.BaseStream.CopyToAsync(outputFile);
-            var errors=proc.StandardError.BaseStream.CopyToAsync(errorFile);
-            timeout=!proc.WaitForExit(30*60*1000);
-            if(timeout){if(!proc.HasExited)proc.Kill(true);if(!proc.WaitForExit(10000))throw new IOException("Atualizador não encerrou após o limite.");}
-            if(!Task.WaitAll(new[]{output,errors},TimeSpan.FromSeconds(15)))throw new IOException("Fluxos de log não encerraram após o atualizador.");
+        log("Atualizando "+s.Name+" em diretório temporário...");
+        bool accepted;
+        {
+            using var outputFile=new FileStream(outputPath,FileMode.CreateNew,FileAccess.Write,FileShare.Read);
+            using var errorsFile=new FileStream(errorPath,FileMode.CreateNew,FileAccess.Write,FileShare.Read);
+            using var writer=new StreamWriter(outputFile){AutoFlush=true};
+            using var proc=Process.Start(start)??throw new IOException("Falha ao iniciar atualizador.");
+            var downloaded=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var output=CaptureWorkshopOutput(proc.StandardOutput,writer,downloaded);
+            var errors=proc.StandardError.BaseStream.CopyToAsync(errorsFile);
+            using var deadline=new CancellationTokenSource();
+            var exited=proc.WaitForExitAsync();
+            var timeout=Task.Delay(TimeSpan.FromMinutes(30),deadline.Token);
+            var first=Task.WhenAny(exited,downloaded.Task,timeout,output,errors).GetAwaiter().GetResult();
+            if((first==output&&!output.IsFaulted)||(first==errors&&!errors.IsFaulted))
+                first=Task.WhenAny(exited,downloaded.Task,timeout).GetAwaiter().GetResult();
+
+            bool stoppedAfterDownload=false;
+            if(!proc.HasExited){
+                stoppedAfterDownload=first==downloaded.Task;
+                try{proc.Kill(true);}
+                catch(InvalidOperationException) when(proc.HasExited){stoppedAfterDownload=false;}
+                if(!proc.WaitForExit(10000))throw new IOException("Atualizador não encerrou.");
+            }
+            deadline.Cancel();
+            if(!Task.WaitAll([output,errors],TimeSpan.FromSeconds(15)))
+                throw new IOException("Fluxos de log não encerraram após o atualizador.");
+            accepted=first!=timeout&&(stoppedAfterDownload||proc.ExitCode==0);
         }
         var failure=new Regex(@"(?i)(#ERROR:|failed to (download|install|update)|error downloading|workshop.*timed out)",RegexOptions.CultureInvariant,TimeSpan.FromSeconds(2));
-        if(timeout||proc.ExitCode!=0||File.ReadLines(outputPath).Concat(File.ReadLines(errorPath)).Any(line=>failure.IsMatch(line)))throw new IOException("Atualizador informou falha ou excedeu o limite em "+s.Name+".");
+        if(!accepted
+            ||File.ReadLines(outputPath).Concat(File.ReadLines(errorPath)).Any(line=>failure.IsMatch(line)))
+            throw new IOException("Atualizador informou falha ou excedeu o limite em "+s.Name+".");
+    }
+
+    static async Task CaptureWorkshopOutput(StreamReader reader,StreamWriter writer,TaskCompletionSource downloaded){
+        while(await reader.ReadLineAsync().ConfigureAwait(false) is string line){
+            await writer.WriteLineAsync(line).ConfigureAwait(false);
+            if(line.Contains("FinishDownloadingServerMods Complete!",StringComparison.Ordinal))
+                downloaded.TrySetResult();
+        }
     }
 }

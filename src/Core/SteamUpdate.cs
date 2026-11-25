@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 namespace Dedicado;
-public static class SteamUpdate {
+public static partial class SteamUpdate {
     public const string AppId="343050";
-    public static string[] Arguments(string install,bool validate)=>new[]{"+force_install_dir",Path.GetFullPath(install),"+login","anonymous","+app_update",AppId}.Concat(validate?new[]{"validate"}:Array.Empty<string>()).Append("+quit").ToArray();
+    public static string[] Arguments(string install,bool validate)=>new[]{"+force_install_dir",Path.GetFullPath(install),"+login","anonymous","+app_info_update","1","+app_update",AppId}.Concat(validate?new[]{"validate"}:Array.Empty<string>()).Append("+quit").ToArray();
     static bool Under(string path,string parent){
         var a=Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
         var b=Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar);
@@ -28,13 +28,16 @@ public static class SteamUpdate {
     }
     public static string Apply(string steamcmd,Cluster target,string install,bool validate,Action<string> log){
         using var gate=new Mutex(false,"Local\\GerenciadorDeDedicadoReset");
-        if(!gate.WaitOne(0))throw new IOException("Outra manutenção em andamento.");
-        try{return Run(steamcmd,target,install,validate,Recovery.DefaultRoot,Offline,Execute,log);}
-        finally{gate.ReleaseMutex();}
+        bool acquired=false;
+        try{
+            try{acquired=gate.WaitOne(0);}catch(AbandonedMutexException){acquired=true;}
+            if(!acquired)throw new IOException("Outra manutenção em andamento.");
+            return Run(steamcmd,target,install,validate,Recovery.DefaultRoot,Offline,Execute,log);
+        }finally{if(acquired)gate.ReleaseMutex();}
     }
     internal static string Run(string steamcmd,Cluster target,string install,bool validate,string backupRoot,Action offline,Action<string,string,bool,string> execute,Action<string> log){
         offline();InterruptedMaintenance.EnsureClear(backupRoot);Check(steamcmd,target,install);
-        var fresh=Engine.Load(Path.GetDirectoryName(target.Path)!,target.Number);
+        var fresh=Engine.LoadClusterDirectory(target.Path);
         if(!fresh.Path.Equals(target.Path,StringComparison.OrdinalIgnoreCase))throw new IOException("Cluster alterado.");
         var backup=Path.Combine(backupRoot,"steamcmd-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8]);
         Engine.SafePath(backup);
@@ -49,6 +52,12 @@ public static class SteamUpdate {
             files[f]=File.Exists(f)?File.ReadAllBytes(f):null;
             bytes=checked(bytes+(files[f]?.LongLength??0));
         }
+        var pending=Pending(backupRoot);
+        foreach(var attempt in pending)CheckPending(attempt,fresh,install,files);
+        if(pending.Length>0){
+            validate=true;
+            log("Retomando atualização SteamCMD pendente com validação dos arquivos.");
+        }
         var drive=new DriveInfo(Path.GetPathRoot(Path.GetFullPath(backup))!);
         if(!drive.IsReady||drive.AvailableFreeSpace<Engine.RequiredBackupBytes(bytes))throw new IOException("Espaço insuficiente para backup.");
         // SteamCMD can download several GiB; this is a conservative floor, not a guarantee.
@@ -60,6 +69,7 @@ public static class SteamUpdate {
         File.WriteAllLines(Path.Combine(backup,"steamcmd-recovery.txt"),new[]{"Cluster: "+target.Path,"Instalação: "+install,"O backup protege o cluster e configurações de mods, não os binários.","Estado: atualização ainda não confirmada."});
         offline();
         foreach(var (f,data) in files)if(data==null?File.Exists(f):!File.Exists(f)||!File.ReadAllBytes(f).AsSpan().SequenceEqual(data))throw new IOException("Configuração mudou durante o backup; atualização cancelada.");
+        WritePending(backup,fresh,install,files);
         log("Backup SteamCMD: "+backup);
         Exception? failure=null;
         try{execute(steamcmd,install,validate,backup);}
@@ -79,25 +89,79 @@ public static class SteamUpdate {
         }catch(Exception ex){throw new IOException("Não foi possível confirmar/restaurar configurações após SteamCMD. Não inicie o servidor. Backup: "+backup,ex);}
         if(failure!=null)throw new IOException("SteamCMD não confirmou atualização. Configurações protegidas; binários podem estar incompletos. Consulte "+backup,failure);
         File.AppendAllText(Path.Combine(backup,"steamcmd-recovery.txt"),"\nSteamCMD confirmou instalação; configurações preservadas. Teste servidor e mods antes de iniciar produção.");
+        foreach(var attempt in pending.Append(backup)){
+            var marker=Path.Combine(attempt,PendingFile);
+            Engine.SafePath(marker);
+            File.Delete(marker);
+        }
         return backup;
     }
     static void Execute(string steamcmd,string install,bool validate,string backup){
-        var start=new ProcessStartInfo(steamcmd){WorkingDirectory=Path.GetDirectoryName(steamcmd)!,UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
-        foreach(var arg in Arguments(install,validate))start.ArgumentList.Add(arg);
-        using var proc=Process.Start(start)??throw new IOException("SteamCMD não iniciou.");
-        var stdout=Path.Combine(backup,"steamcmd.log");var stderr=Path.Combine(backup,"steamcmd.stderr.log");
-        using(var a=new FileStream(stdout,FileMode.CreateNew,FileAccess.Write,FileShare.Read))
-        using(var b=new FileStream(stderr,FileMode.CreateNew,FileAccess.Write,FileShare.Read)){
-            var x=proc.StandardOutput.BaseStream.CopyToAsync(a);var y=proc.StandardError.BaseStream.CopyToAsync(b);
-            if(!proc.WaitForExit(60*60*1000)){if(!proc.HasExited)proc.Kill(true);if(!proc.WaitForExit(10000))throw new IOException("SteamCMD não encerrou após tempo limite.");throw new IOException("Tempo limite excedido.");}
-            if(!Task.WaitAll(new[]{x,y},TimeSpan.FromSeconds(15)))throw new IOException("Logs do SteamCMD incompletos.");
-        }
-        if(proc.ExitCode!=0||!Confirmed(File.ReadLines(stdout)))throw new IOException("SteamCMD não retornou confirmação de instalação do app "+AppId+".");
+        var bootstrap=RunSteamCmd(steamcmd,["+quit"],backup,"steamcmd-bootstrap",TimeSpan.FromMinutes(5));
+        if(bootstrap.ExitCode==7)
+            bootstrap=RunSteamCmd(steamcmd,["+quit"],backup,"steamcmd-bootstrap-retry",TimeSpan.FromMinutes(5));
+        if(bootstrap.ExitCode!=0)
+            throw new IOException("SteamCMD não inicializou. Código: "+bootstrap.ExitCode+". Veja "+bootstrap.Output);
+        Offline();
+        ConfirmUpdate(validate,(verify,label)=>{
+            Offline();
+            var result=RunSteamCmd(steamcmd,Arguments(install,verify),backup,label,TimeSpan.FromHours(1));
+            return (result.ExitCode,File.ReadAllLines(result.Output),File.ReadAllLines(Path.Combine(backup,label+".stderr.log")));
+        });
+        VerifyInstalledManifest(install);
     }
+    internal static bool InstalledManifest(string text){
+        string? Field(string name){
+            var matches=Regex.Matches(text,"(?m)^\\s*\""+Regex.Escape(name)+"\"\\s+\"([0-9]+)\"\\s*$",RegexOptions.CultureInvariant,TimeSpan.FromSeconds(1));
+            return matches.Count==1?matches[0].Groups[1].Value:null;
+        }
+        return Field("appid")==AppId&&Field("StateFlags")=="4"&&Field("UpdateResult")=="0"&&ulong.TryParse(Field("buildid"),out var build)&&build>0;
+    }
+    static void VerifyInstalledManifest(string install){
+        var manifest=Path.Combine(install,"steamapps","appmanifest_"+AppId+".acf");
+        Engine.SafePath(manifest);
+        if(!File.Exists(manifest)||new FileInfo(manifest).Length>1_000_000||!InstalledManifest(File.ReadAllText(manifest)))
+            throw new IOException("SteamCMD informou sucesso, mas o manifesto não confirma instalação completa do app "+AppId+". A recuperação permanece pendente.");
+        Engine.FindExe(install);
+    }
+    // A timeout followed by a success line is ambiguous, not proof of installation.
+    // Retry once in a fresh SteamCMD process with validation, never accept the first log.
+    internal static void ConfirmUpdate(bool validate,Func<bool,string,(int ExitCode,string[] Output,string[] Errors)> run){
+        var result=run(validate,"steamcmd");
+        if(result.ExitCode==0&&Confirmed(result.Output)&&!result.Errors.Any(FailureLine))return;
+        if(result.Output.Concat(result.Errors).Any(line=>line.Contains("Timed out waiting for update to start",StringComparison.OrdinalIgnoreCase))){
+            result=run(true,"steamcmd-validate-retry");
+            if(result.ExitCode==0&&Confirmed(result.Output)&&!result.Errors.Any(FailureLine))return;
+        }
+        throw new IOException("SteamCMD não confirmou a instalação do app "+AppId+". Código: "+result.ExitCode+". Consulte os logs; a recuperação permanece pendente.");
+    }
+    static (int ExitCode,string Output) RunSteamCmd(string steamcmd,IEnumerable<string> args,string backup,string label,TimeSpan timeout){
+        var start=new ProcessStartInfo(steamcmd){
+            WorkingDirectory=Path.GetDirectoryName(steamcmd)!,UseShellExecute=false,
+            CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true
+        };
+        foreach(var arg in args)start.ArgumentList.Add(arg);
+        var stdout=Path.Combine(backup,label+".log");
+        var stderr=Path.Combine(backup,label+".stderr.log");
+        using var output=new FileStream(stdout,FileMode.CreateNew,FileAccess.Write,FileShare.Read);
+        using var errors=new FileStream(stderr,FileMode.CreateNew,FileAccess.Write,FileShare.Read);
+        using var proc=Process.Start(start)??throw new IOException("SteamCMD não iniciou.");
+        var copyOutput=proc.StandardOutput.BaseStream.CopyToAsync(output);
+        var copyErrors=proc.StandardError.BaseStream.CopyToAsync(errors);
+        if(!proc.WaitForExit(timeout)){
+            if(!proc.HasExited)proc.Kill(true);
+            if(!proc.WaitForExit(10000))throw new IOException("SteamCMD não encerrou após tempo limite.");
+            throw new IOException("Tempo limite excedido em "+label+".");
+        }
+        if(!Task.WaitAll([copyOutput,copyErrors],TimeSpan.FromSeconds(15)))
+            throw new IOException("Logs do SteamCMD incompletos em "+label+".");
+        return (proc.ExitCode,stdout);
+    }
+    static bool FailureLine(string line)=>Regex.IsMatch(line,@"(?i)\bERROR!\s+Failed to install app|No subscription|Disk write failure|Timed out waiting for update to start");
     internal static bool Confirmed(IEnumerable<string> lines){
         bool success=false;
         foreach(var line in lines){
-            if(Regex.IsMatch(line,@"(?i)\bERROR!\s+Failed to install app|No subscription|Disk write failure"))return false;
+            if(FailureLine(line))return false;
             if(line.Contains("Success! App '343050' fully installed.",StringComparison.OrdinalIgnoreCase)||line.Contains("Success! App '343050' already up to date.",StringComparison.OrdinalIgnoreCase))success=true;
         }
         return success;

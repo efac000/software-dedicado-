@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
 namespace Dedicado;
-public static class Lua {
+public static partial class Lua {
     // Accept literal tables only; never load or evaluate Lua.
     static readonly Regex Lex = new("""\G(?:\s+|--\[(?<eq>=*)\[.*?\]\k<eq>\]|--(?!\[=*\[)[^\r\n]*|\[(?<long>=*)\[.*?\]\k<long>\]|"(?:\\[\s\S]|[^"\\\r\n])*"|'(?:\\[\s\S]|[^'\\\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?(?:0[xX][0-9a-fA-F]+|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)|[{}\[\]=,;])""",RegexOptions.Singleline|RegexOptions.CultureInvariant,TimeSpan.FromSeconds(3));
-    static Parser Parse(string text,out Dictionary<string,object?> table,out List<int> positions) {
+    static List<string> Tokenize(string text,out List<int> positions) {
         if(text.Length>4_000_000) throw new FormatException("Arquivo Lua grande demais.");
         var tokens=new List<string>(); positions=new List<int>(); int p=0;
         while(p<text.Length) {
@@ -12,7 +12,10 @@ public static class Lua {
             var t=m.Value; p+=m.Length;
             if(!char.IsWhiteSpace(t[0])&&!t.StartsWith("--")){tokens.Add(t);positions.Add(m.Index);}
         }
-        var parser=new Parser(tokens); parser.Expect("return"); table=parser.Table(0);
+        return tokens;
+    }
+    static Parser Parse(string text,out Dictionary<string,object?> table,out List<int> positions) {
+        var parser=new Parser(Tokenize(text,out positions)); parser.Expect("return"); table=parser.Table(0);
         if(parser.Peek==";") parser.Take();
         if(parser.Peek!=null) throw new FormatException("Código Lua adicional não suportado.");
         return parser;
@@ -50,6 +53,9 @@ public static class Lua {
     }
     sealed class Parser(List<string> t) {
         public Dictionary<string,int> EnabledTokens {get;}=new(StringComparer.Ordinal);
+        public Dictionary<Dictionary<string,object?>,Dictionary<string,int>> OptionTokens {get;}=new();
+        public Dictionary<Dictionary<string,object?>,int> TableCloses {get;}=new();
+        public Dictionary<Dictionary<string,object?>,bool> TableSeparators {get;}=new();
         public int RootClose {get;private set;}
         public bool RootHasEntries {get;private set;}
         public bool RootTrailingSeparator {get;private set;}
@@ -77,24 +83,43 @@ public static class Lua {
             if(Quoted(x)||Regex.IsMatch(x,@"\A-?(?:[0-9]|\.[0-9])"))return x;
             throw new FormatException("Expressão Lua não literal: "+x);
         }
+        public Dictionary<string,object?> Assignments(){
+            var values=new Dictionary<string,object?>(StringComparer.Ordinal);
+            while(Peek!=null){
+                if(Peek==";"){Take();continue;}
+                var name=Take();
+                if(!Regex.IsMatch(name,@"\A[A-Za-z_][A-Za-z_0-9]*\z"))
+                    throw new FormatException("Nome de metadado inválido.");
+                Expect("=");
+                if(!values.TryAdd(name,Value(0)))throw new FormatException("Metadado duplicado.");
+            }
+            return values;
+        }
         public Dictionary<string,object?> Table(int depth){
             if(depth>64)throw new FormatException("Lua muito aninhado.");
             Expect("{"); var d=new Dictionary<string,object?>(StringComparer.Ordinal); int array=0;
             if(depth==1)lastEnabled=-1;
             while(Peek!="}"){
                 string key;
+                bool named=true;
                 if(Peek=="["){Take();key=Key(Take());Expect("]");Expect("=");}
                 else if(i+1<t.Count&&t[i+1]=="="){key=Key(Take());Expect("=");}
-                else key=(++array).ToString();
+                else {key=(++array).ToString();named=false;}
                 int valueIndex=i;
                 var value=Value(depth);
+                if(depth==2&&named&&i==valueIndex+1){
+                    if(!OptionTokens.TryGetValue(d,out var tokens))OptionTokens.Add(d,tokens=new(StringComparer.Ordinal));
+                    tokens.Add(key,valueIndex);
+                }
                 if(depth==1&&key=="enabled"&&value is bool)lastEnabled=valueIndex;
                 if(depth==0&&value is Dictionary<string,object?>&&lastEnabled>=0)EnabledTokens[key]=lastEnabled;
                 if(!d.TryAdd(key,value))throw new FormatException("Chave duplicada: "+key);
                 bool separator=Peek is "," or ";";
+                TableSeparators[d]=separator;
                 if(depth==0){RootHasEntries=true;RootTrailingSeparator=separator;}
                 if(separator)Take();else if(Peek!="}")throw new FormatException("Separador ausente.");
             }
+            TableCloses[d]=i;
             if(depth==0)RootClose=i;
             Expect("}");return d;
         }

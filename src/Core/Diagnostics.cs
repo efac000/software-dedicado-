@@ -69,7 +69,7 @@ public static class Diagnostics {
         Probe("Cluster",()=>{
             if(string.IsNullOrWhiteSpace(clusterPath)||!Path.IsPathFullyQualified(clusterPath)||!Directory.Exists(clusterPath)){Add(Severity.Error,"CLUSTER_MISSING","Cluster","Pasta do cluster não encontrada.","Selecione um cluster existente.");return;}
             Engine.SafePath(clusterPath);clusterOk=true;clusterName=Path.GetFileName(Path.TrimEndingDirectorySeparator(clusterPath));
-            if(!clusterName.StartsWith("Cluster_",StringComparison.Ordinal)||!Engine.ValidNumber(clusterName[8..]))Add(Severity.Warning,"CUSTOM_CLUSTER","Cluster","Nome personalizado ou não convencional.","O diagnóstico pode ler esta pasta, mas o reset automático exige Cluster_N.");
+            if(!Engine.ValidClusterFolder(clusterName))Add(Severity.Warning,"CUSTOM_CLUSTER","Cluster","Nome de pasta não suportado.","Use uma pasta com nome válido antes da manutenção.");
         });
         if(!clusterOk)return result.ToArray();
         var clusterIni=Path.Combine(clusterPath,"cluster.ini");
