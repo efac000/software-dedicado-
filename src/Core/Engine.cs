@@ -56,9 +56,9 @@ public static class Engine {
         throw new IOException("Executável do dedicado não encontrado.");
     }
     static string Override(Cluster c,string shard)=>System.IO.Path.Combine(c.Path,shard,"modoverrides.lua");
-    static byte[] Read(string path,bool required){
+    static byte[]? Read(string path,bool required){
         SafePath(path);
-        if(!File.Exists(path)){if(required)throw new IOException("Arquivo ausente: "+path);return Utf8.GetBytes("return {}");}
+        if(!File.Exists(path)){if(required)throw new IOException("Arquivo ausente: "+path);return null;}
         if(new FileInfo(path).Length>4_000_000)throw new IOException("Arquivo Lua grande demais.");
         return File.ReadAllBytes(path);
     }
@@ -77,9 +77,19 @@ public static class Engine {
         SafePath(setup);
         var settings=System.IO.Path.Combine(mods,"modsettings.lua"); SafePath(settings);
         if(File.Exists(settings)&&Regex.IsMatch(File.ReadAllText(settings),@"(?m)^\s*(ForceEnableMod|ForceDisableMod)\s*\("))throw new IOException("modsettings.lua contém regras forçadas; revise manualmente.");
-        var shards=source.Shards.Select(s=>{var data=Read(Override(source,s),true);return new ShardPlan(s,data,Ids(data),Ids(Read(Override(target,s),false)));}).ToArray();
+        // Capture each override once; missing and empty-table files are different states.
+        var fingerprintParts=new List<string>{source.Path,target.Path,install,exe,FileHash(Path.Combine(source.Path,"cluster.ini")),FileHash(Path.Combine(target.Path,"cluster.ini")),File.Exists(setup)?FileHash(setup):"missing",File.Exists(settings)?FileHash(settings):"missing"};
+        var shards=source.Shards.Select(s=>{
+            var data=Read(Override(source,s),true)!;
+            var previous=Read(Override(target,s),false);
+            var sourceIni=Path.Combine(source.Path,s,"server.ini");
+            var targetIni=Path.Combine(target.Path,s,"server.ini");
+            SafePath(sourceIni);SafePath(targetIni);
+            fingerprintParts.AddRange(new[]{s,FileHash(sourceIni),FileHash(targetIni),Hash(data),previous is null?"missing":Hash(previous)});
+            return new ShardPlan(s,data,Ids(data),previous is null?[]:Ids(previous));
+        }).ToArray();
         if(!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado.");
-        var fingerprint=Hash(Utf8.GetBytes(string.Join("|",new[]{source.Path,target.Path,install,FileHash(System.IO.Path.Combine(source.Path,"cluster.ini")),FileHash(System.IO.Path.Combine(target.Path,"cluster.ini")),File.Exists(setup)?FileHash(setup):"missing",File.Exists(settings)?FileHash(settings):"missing"}.Concat(shards.Select(s=>Hash(s.Content)+":"+Hash(Read(Override(target,s.Name),false)))))));
+        var fingerprint=Hash(Utf8.GetBytes(System.Text.Json.JsonSerializer.Serialize(fingerprintParts)));
         return new(source,target,install,exe,shards,fingerprint);
     }
     static bool IsWithin(string path,string parent){var a=Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);var b=Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar);return a.Equals(b,StringComparison.OrdinalIgnoreCase)||a.StartsWith(b+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}
