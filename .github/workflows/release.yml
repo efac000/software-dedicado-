@@ -1,5 +1,8 @@
 name: Publicar revisão candidata
 on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'tests/**', '.github/workflows/release.yml']
   workflow_dispatch:
 permissions:
   contents: write
