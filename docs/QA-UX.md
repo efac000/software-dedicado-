@@ -39,3 +39,10 @@ PR #29 integrado; testes locais de navegação em Diagnóstico e Backups nos doi
 - [Release estável 1.0.0-build-45704640329-1](https://github.com/efac000/software-dedicado-/releases/tag/1.0.0-build-45704640329-1) promovida sem recompilar nem substituir os binários.
 - [CI do PR](https://github.com/efac000/software-dedicado-/actions/runs/45704079064), [CI da revisão](https://github.com/efac000/software-dedicado-/actions/runs/45705851101), [release](https://github.com/efac000/software-dedicado-/actions/runs/45704640329) e [implantação pública anterior](https://github.com/efac000/software-dedicado-/actions/runs/45705851112) aprovados. O CI redundante 45704640412 ficou preso e recebeu solicitação de cancelamento; a automação temporária 45704826063 expirou aguardando esse CI, substituída pela publicação direta confirmada. As falhas históricas são preservadas no histórico.
 - Limites: 175% e 200% somente simulados; Narrador/NVDA não exigidos; executáveis sem Authenticode. Não se garante ausência absoluta de defeitos.
+
+## Homologação do tema escuro fixo (25/11/2026)
+
+- PR #30 aprovado; código de release 465092256061e3e6f36495f3cd6a0f459943e5c4 com árvore idêntica à revisão testada. Tema claro, automático e seletor removidos; preferência antiga de tema ignorada; alto contraste do Windows preservado.
+- Testes locais do núcleo e da interface em 96, 120 e 144 DPI reais, cinco viewports em cada escala; DARK_ONLY_PREFERENCES_PASS, navegação, perímetro, cancelamento, diagnóstico e backups aprovados. Escala original 100% restaurada.
+- CI do PR 45708805848 e release 45709177843 aprovados; autotestes de x64/x86/ARM64, ARM64 nativo e SHA-256 dos três executáveis públicos verificados.
+- Build 1.0.0-build-45709177843-1 promovida sem modificar os binários. A homologação online da base permanece documentada acima; nenhuma nova alegação de teste online nesta revisão exclusivamente visual.
