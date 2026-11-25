@@ -64,7 +64,7 @@ sealed class MainForm:Form{
         var dirs=new[]{Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Documents"),Path.Combine(Environment.GetEnvironmentVariable("OneDrive")??"","Documents"),Path.Combine(Environment.GetEnvironmentVariable("OneDriveConsumer")??"","Documents")};
         var candidates=dirs.Where(Path.IsPathFullyQualified).Select(d=>Path.Combine(d,"Klei","DoNotStarveTogether")).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         foreach(var c in candidates)try{if(Engine.Discover(c).Length>0)return c;}catch{}
-        return candidates.FirstOrDefault(Directory.Exists)??candidates.First();
+        return candidates.FirstOrDefault(Directory.Exists)??candidates.FirstOrDefault()??"";
     }
     static string FindInstall(){
         var candidates=new List<string>();
@@ -133,7 +133,7 @@ sealed class MainForm:Form{
         var shard=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=105,BackColor=PanelColor,ForeColor=Ink};
         shard.Items.AddRange(plan.Target.Shards.Cast<object>().ToArray());shard.SelectedIndex=0;
         var input=new TextBox{Width=270,PlaceholderText="ID ou link HTTPS da Workshop",BackColor=PanelColor,ForeColor=Ink};
-        var add=new Button{Text="Adicionar / ativar"},toggle=new Button{Text="Ativar / desativar"},refresh=new Button{Text="Consultar Workshop"},open=new Button{Text="Abrir Workshop"},ok=new Button{Text="Revisar plano"},cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};
+        Button add=new(){Text="Adicionar / ativar"},toggle=new(){Text="Ativar / desativar"},refresh=new(){Text="Consultar Workshop"},open=new(){Text="Abrir Workshop"},ok=new(){Text="Revisar plano"},cancel=new(){Text="Cancelar",DialogResult=DialogResult.Cancel};
         foreach(var b in new[]{add,toggle,refresh,open,ok,cancel})Style(b);
         var search=new TextBox{Width=200,PlaceholderText="Filtrar nome ou ID",BackColor=PanelColor,ForeColor=Ink};
         var message=new Label{Dock=DockStyle.Bottom,Height=38,ForeColor=Muted,Text="Alterações em memória. Selecione um shard e revise antes de aplicar."};
@@ -147,7 +147,7 @@ sealed class MainForm:Form{
         controls.Controls.AddRange(new Control[]{shard,input,add,toggle,search,refresh,open});
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=44,FlowDirection=FlowDirection.RightToLeft};actions.Controls.Add(cancel);actions.Controls.Add(ok);
         dialog.Controls.Add(table);dialog.Controls.Add(panel);dialog.Controls.Add(message);dialog.Controls.Add(actions);dialog.Controls.Add(controls);dialog.CancelButton=cancel;
-        bool loading=false;int previewGeneration=0;using var lifetime=new CancellationTokenSource();
+        bool loading=false;int previewGeneration=0;using var lifetime=new CancellationTokenSource();CancellationTokenSource? activePreview=null;
         string Shard()=>shard.SelectedItem!.ToString()!;
         string? Selected()=>table.CurrentRow?.Cells[1].Value as string;
         void ClearImage(){var old=preview.Image;preview.Image=null;old?.Dispose();}
@@ -175,12 +175,13 @@ sealed class MainForm:Form{
             finally{loading=false;if(!dialog.IsDisposed)refresh.Enabled=add.Enabled=toggle.Enabled=ok.Enabled=true;}
         }
         async Task ShowPreview(){
-            var generation=++previewGeneration;ClearImage();var id=Selected();title.Text=id==null?"Selecione um mod":names.GetValueOrDefault(id,id)+"\nWorkshop "+id;
+            var generation=++previewGeneration;activePreview?.Cancel();activePreview?.Dispose();activePreview=null;ClearImage();var id=Selected();title.Text=id==null?"Selecione um mod":names.GetValueOrDefault(id,id)+"\nWorkshop "+id;
             if(id==null||!previews.TryGetValue(id,out var url))return;
             Image? img=null;
-            try{img=await PreviewImage.Fetch(url,lifetime.Token);
+            var request=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);activePreview=request;
+            try{img=await PreviewImage.Fetch(url,request.Token);
                 if(generation==previewGeneration&&!dialog.IsDisposed&&!lifetime.IsCancellationRequested){preview.Image=img;img=null;}
-            }catch{}finally{img?.Dispose();}
+            }catch{}finally{img?.Dispose();if(ReferenceEquals(activePreview,request)){activePreview=null;request.Dispose();}}
         }
         void Edit(string id,bool enabled){
             try{texts[Shard()]=Lua.SetEnabled(texts[Shard()],id,enabled);Populate(id);message.Text="Alteração preparada; nenhum arquivo gravado.";}
@@ -196,7 +197,7 @@ sealed class MainForm:Form{
         ok.Click+=(_,_)=>{try{var candidate=new Dictionary<string,byte[]>();foreach(var sh in plan.Shards){var text=texts[sh.Name];Lua.Active(text);candidate[sh.Name]=text==utf8.GetString(sh.Content).TrimStart('\uFEFF')?sh.Content:utf8.GetBytes(text);}
             if(!candidate.Values.Any(b=>Lua.Active(utf8.GetString(b).TrimStart('\uFEFF')).Count>0)){message.Text="Mantenha ao menos um mod ativo; remoção integral não suportada.";return;}
             result=candidate;dialog.DialogResult=DialogResult.OK;}catch(Exception e){message.Text=e.Message;}};
-        dialog.FormClosing+=(_,e)=>{if(loading){e.Cancel=true;message.Text="A consulta está em andamento.";}else{lifetime.Cancel();++previewGeneration;ClearImage();}};
+        dialog.FormClosing+=(_,e)=>{if(loading){e.Cancel=true;message.Text="A consulta está em andamento.";}else{lifetime.Cancel();activePreview?.Cancel();activePreview?.Dispose();activePreview=null;++previewGeneration;ClearImage();}};
         Populate();dialog.Shown+=async(_,_)=>await Lookup();
         return dialog.ShowDialog(this)==DialogResult.OK?result:null;
     }
