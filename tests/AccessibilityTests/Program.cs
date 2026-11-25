@@ -67,6 +67,7 @@ static class AccessibilityTests{
                 Assert(buttons.Select(b=>char.ToUpperInvariant(b.Text[b.Text.IndexOf('&')+1])).Distinct().Count()==12,"Duplicate shortcuts");
                 foreach(var size in new[]{new Size(1536,864),new Size(1100,830),new Size(850,680),new Size(683,512),new Size(640,420)}){
                     form.Size=size;form.PerformLayout();Application.DoEvents();
+                    if(form.DeviceDpi==96&&size.Width>=850&&size.Height>=680)Assert(!host.HorizontalScroll.Visible&&!host.VerticalScroll.Visible,"Unnecessary scrollbars in normal window");
                     foreach(var b in buttons)Reachable(host,b);
                     var feedback=buttons.Single(b=>b.Text.Contains("Feedbac"));
                     feedback.Focus();Application.DoEvents();

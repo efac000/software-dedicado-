@@ -6,18 +6,31 @@ sealed partial class MainForm{
         var viewport=new Panel{Dock=DockStyle.Fill,AutoScroll=true,BackColor=Bg,TabStop=false};
         content.Dock=DockStyle.None;content.Location=Point.Empty;
         viewport.Controls.Add(content);
-        viewport.SizeChanged+=(_,_)=>ResizeViewport(viewport,content,minWidth,minHeight);
+        bool queued=false;
+        void Resize(){
+            ResizeViewport(viewport,content,minWidth,minHeight);
+            if(queued||!viewport.IsHandleCreated||viewport.IsDisposed)return;
+            queued=true;
+            viewport.BeginInvoke(new Action(()=>{
+                queued=false;if(viewport.IsDisposed)return;
+                ResizeViewport(viewport,content,minWidth,minHeight);
+                viewport.PerformLayout();
+            }));
+        }
+        viewport.SizeChanged+=(_,_)=>Resize();
+        viewport.HandleCreated+=(_,_)=>Resize();
         return viewport;
     }
     void ResizeViewport(Panel viewport,Control content,int minWidth,int minHeight){
         if(viewport.ClientSize.Width<=0||viewport.ClientSize.Height<=0)return;
         int w=LogicalToDeviceUnits(minWidth),h=LogicalToDeviceUnits(minHeight);
-        var size=viewport.ClientSize;
+        var size=viewport.Size;
         int barW=SystemInformation.VerticalScrollBarWidth,barH=SystemInformation.HorizontalScrollBarHeight;
         bool vertical=size.Height<h,horizontal=size.Width<w;
         vertical|=horizontal&&size.Height-barH<h;
         horizontal|=vertical&&size.Width-barW<w;
-        content.Size=new Size(Math.Max(w,size.Width-(vertical?barW:0)),Math.Max(h,size.Height-(horizontal?barH:0)));
+        var desired=new Size(Math.Max(w,size.Width-(vertical?barW:0)),Math.Max(h,size.Height-(horizontal?barH:0)));
+        if(content.Size!=desired)content.Size=desired;
         viewport.AutoScrollMinSize=new Size(w,h);
     }
     void FitWorkingArea(){
