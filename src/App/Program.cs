@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Win32;
+
 using Dedicado;
 namespace Gerenciador;
 static class Program {
@@ -57,10 +57,14 @@ sealed partial class MainForm:Form{
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var heading=new Label{Text="Gerenciador de Dedicado",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI Semibold",23),ForeColor=Ink};
         var updater=new Button{Text="Atualizar servidor",Anchor=AnchorStyles.Right};
+        var detect=new Button{Text="Detectar dedicado",Anchor=AnchorStyles.Right};
+        Style(detect);detect.Click+=async(_,_)=>await AutoLocate();
         Style(updater);
         updater.Click+=async(_,_)=>await UpdateDedicated();
         top.Controls.Add(heading);
-        top.Controls.Add(updater);
+        var topActions=new FlowLayoutPanel{AutoSize=true,Anchor=AnchorStyles.Right,WrapContents=false};
+        topActions.Controls.Add(detect);topActions.Controls.Add(updater);
+        top.Controls.Add(topActions);
         main.Controls.Add(top);
 
         mode.Items.AddRange(new object[]{"Copiar mods de outro mundo","Reinstalar mods deste servidor","Gerenciar mods visualmente","Editar Lua (avançado)"});
@@ -103,12 +107,12 @@ sealed partial class MainForm:Form{
         foreach(var b in new[]{scan,analyze,reset,diagnose,backups,website})Style(b);analyze.BackColor=Accent;analyze.ForeColor=Bg;analyze.FlatAppearance.MouseOverBackColor=Color.FromArgb(163,230,255);analyze.FlatAppearance.MouseDownBackColor=Color.FromArgb(100,190,230);
         root.Text=DefaultClusterRoot();
         destinationRoot.Text=root.Text;
-        install.Text=FindInstall();
-        root.TextChanged+=(_,_)=>{InvalidatePlan();source.Items.Clear();};destinationRoot.TextChanged+=(_,_)=>{InvalidatePlan();target.Items.Clear();};install.TextChanged+=(_,_)=>InvalidatePlan();source.SelectedIndexChanged+=(_,_)=>InvalidatePlan();target.SelectedIndexChanged+=(_,_)=>InvalidatePlan();exclusive.CheckedChanged+=(_,_)=>reset.Enabled=!busy&&current!=null&&exclusive.Checked;online.CheckedChanged+=(_,_)=>InvalidatePlan();
-        scan.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(install.Text))install.Text=FindInstall();RefreshClusters();};analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();diagnose.Click+=async(_,_)=>await Diagnose();backups.Click+=async(_,_)=>await OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
+        install.Text="";
+        root.TextChanged+=(_,_)=>{InvalidatePlan();source.Items.Clear();};destinationRoot.TextChanged+=(_,_)=>{InvalidatePlan();target.Items.Clear();};install.TextChanged+=(_,_)=>{exclusive.Checked=false;InvalidatePlan();};source.SelectedIndexChanged+=(_,_)=>InvalidatePlan();target.SelectedIndexChanged+=(_,_)=>{exclusive.Checked=false;InvalidatePlan();};exclusive.CheckedChanged+=(_,_)=>reset.Enabled=!busy&&current!=null&&exclusive.Checked;online.CheckedChanged+=(_,_)=>InvalidatePlan();
+        scan.Click+=(_,_)=>{RefreshClusters();};analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();diagnose.Click+=async(_,_)=>await Diagnose();backups.Click+=async(_,_)=>await OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
         FormClosing+=(_,e)=>{if(busy){e.Cancel=true;MessageBox.Show("A operação está em andamento. Aguarde a conclusão.");}};
         mode.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();RefreshMode();RefreshClusters();};
-        RefreshMode();Shown+=(_,_)=>RefreshClusters();
+        RefreshMode();Shown+=async(_,_)=>{RefreshClusters();await AutoLocate(true);};
     }
     static void Style(Button b){b.AutoSize=true;b.MinimumSize=new Size(0,32);b.FlatStyle=FlatStyle.Flat;b.BackColor=PanelColor;b.ForeColor=Ink;b.FlatAppearance.BorderColor=Border;b.FlatAppearance.MouseOverBackColor=Raised;b.FlatAppearance.MouseDownBackColor=Color.FromArgb(40,68,109);b.Padding=new Padding(8,0,8,0);}
     Control SelectionRow(string title,Control field,Button? button=null){
@@ -145,21 +149,6 @@ sealed partial class MainForm:Form{
         var candidates=dirs.Where(Path.IsPathFullyQualified).Select(d=>Path.Combine(d,"Klei","DoNotStarveTogether")).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         foreach(var c in candidates)try{if(Engine.Discover(c).Length>0)return c;}catch{}
         return candidates.FirstOrDefault(Directory.Exists)??candidates.FirstOrDefault()??"";
-    }
-    static string FindInstall(){
-        var candidates=new List<string>();
-        foreach(var key in new[]{@"HKEY_CURRENT_USER\Software\Valve\Steam",@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam"}){
-            try{if(Registry.GetValue(key,"SteamPath",null) is string s)candidates.Add(s);if(Registry.GetValue(key,"InstallPath",null) is string p)candidates.Add(p);}catch{}
-        }
-        candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),"Steam"));
-        candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Steam"));
-        candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"steamcmd"));
-        candidates.Add(@"C:\steamcmd");
-        foreach(var steam in candidates.ToArray())try{var vdf=Path.Combine(steam,"steamapps","libraryfolders.vdf");if(File.Exists(vdf))foreach(Match m in Regex.Matches(File.ReadAllText(vdf),""" "path"\s+"([^"]+)" """.Trim()))candidates.Add(m.Groups[1].Value.Replace(@"\\",@"\"));}catch{}
-        foreach(var library in candidates.Distinct(StringComparer.OrdinalIgnoreCase)){
-            foreach(var p in new[]{Path.Combine(library,"steamapps","common","Don't Starve Together Dedicated Server"),Path.Combine(library,"dst"),Path.Combine(library,"server"),Path.Combine(library,"Don't Starve Together Dedicated Server")})try{Engine.FindExe(p);return p;}catch{}
-        }
-        return "";
     }
     void InvalidatePlan(){publishedDependencies.Clear();current=null;reset.Enabled=false;grid.Rows.Clear();status.Text="Analise novamente antes de executar.";}
     bool InPlace=>mode.SelectedIndex!=0;

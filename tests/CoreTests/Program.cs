@@ -5,6 +5,7 @@ SteamUpdateTests.Run();
 LuaOptionTests.Run();
 WorkshopSearchTests.Run();
 DependencyTests.Run();
+DiscoveryTests.Run();
 SteamBootstrapTests.Run();
 InterruptedTests.Run();
 foreach(var x in new[]{"","0","-1","1a2","1.5"," 1","1 ","01","١","9999999999","1\n"})Check(!Engine.ValidNumber(x),"Número inválido: "+x);

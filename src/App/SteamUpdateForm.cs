@@ -5,7 +5,9 @@ sealed partial class MainForm {
         if(busy)return;
         if(target.SelectedItem is not Cluster chosen){Write("Selecione o cluster do dedicado antes de atualizar.");return;}
         var installation=install.Text;
-        var existing=SteamBootstrap.Find();
+        var existing=selectedSteamCmd;
+        if(existing!=null){try{Engine.SafePath(existing);if(!File.Exists(existing))existing=null;}catch{existing=null;}}
+        existing??=SteamBootstrap.Find();
         string exe;
         var choice=MessageBox.Show(this,existing!=null?"SteamCMD localizado:\n"+existing+"\n\nSim: usar este executável. Não: selecionar outro.":"SteamCMD não localizado.\n\nSim: baixar a versão oficial da Valve para a pasta local do aplicativo. Não: selecionar um steamcmd.exe existente.","SteamCMD",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Question,MessageBoxDefaultButton.Button3);
         if(choice==DialogResult.Cancel)return;
