@@ -28,7 +28,7 @@ public static class Discovery {
     }
     public static DiscoveryResult Scan(IEnumerable<string> steamRoots,IEnumerable<string> serverRoots,IEnumerable<string> clusterRoots,IEnumerable<string> steamCmdRoots){
         var libraries=new List<string>();
-        foreach(var root in Paths(steamRoots)){
+        foreach(var root in Paths(steamRoots.Concat(steamCmdRoots))){
             libraries.Add(root);
             try{
                 var file=Path.Combine(root,"steamapps","libraryfolders.vdf");

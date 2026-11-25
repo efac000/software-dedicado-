@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Microsoft.Win32;
 using Dedicado;
 namespace Gerenciador;
@@ -17,6 +18,28 @@ sealed partial class MainForm {
         var cmd=new List<string>{SteamBootstrap.ManagedDirectory};
         var server=new List<string>();
         var clusters=new List<string>();
+        foreach(var key in new[]{
+            @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 343050",
+            @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 343050",
+            @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 343050"}){
+            try{if(Registry.GetValue(key,"InstallLocation",null) is string path&&Path.IsPathFullyQualified(path))server.Add(path);}catch{}
+        }
+        foreach(var name in new[]{"dontstarve_dedicated_server_nullrenderer_x64","dontstarve_dedicated_server_nullrenderer","steamcmd"}){
+            foreach(var process in Process.GetProcessesByName(name)){
+                using(process){
+                    try{
+                        var path=process.MainModule?.FileName;
+                        if(path==null||!Path.IsPathFullyQualified(path))continue;
+                        var folder=Path.GetDirectoryName(path);
+                        if(folder==null)continue;
+                        if(name=="steamcmd"){cmd.Add(folder);continue;}
+                        if(Path.GetFileName(folder).Equals("bin64",StringComparison.OrdinalIgnoreCase)||Path.GetFileName(folder).Equals("bin",StringComparison.OrdinalIgnoreCase)){
+                            var parent=Path.GetDirectoryName(folder);if(parent!=null)server.Add(parent);
+                        }
+                    }catch(System.ComponentModel.Win32Exception){}catch(InvalidOperationException){}catch(NotSupportedException){}
+                }
+            }
+        }
         if(!string.IsNullOrWhiteSpace(profile)){
             cmd.Add(Path.Combine(profile,"steamcmd"));
             server.Add(Path.Combine(profile,"dst-server"));server.Add(Path.Combine(profile,"dedicado"));

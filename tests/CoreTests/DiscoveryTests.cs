@@ -20,6 +20,9 @@ static class DiscoveryTests{
             if(result.Clusters.Length!=1||result.Clusters[0].Path!=world||result.SteamCmd.Length!=1)throw new Exception("Cluster/SteamCMD detection");
             if(Engine.Hash(File.ReadAllBytes(Path.Combine(world,"cluster.ini")))!=before)throw new Exception("Discovery wrote configuration");
             if(Discovery.Scan([],[],[],[]).Installs.Length!=0)throw new Exception("Empty discovery");
+            var x86=Engine.ExecutableCandidates(System.Runtime.InteropServices.Architecture.X86);
+            if(x86.Any(p=>p.Name.Contains("_x64")))throw new Exception("x86 selected x64 server");
+            if(Engine.ExecutableCandidates(System.Runtime.InteropServices.Architecture.X64)[0].Dir!="bin64")throw new Exception("x64 server preference");
         }finally{Directory.Delete(root,true);}
     }
 }

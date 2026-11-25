@@ -72,9 +72,14 @@ public static class Engine {
             using(p){if(p.ProcessName.StartsWith("dontstarve",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Feche DST e todos os dedicados antes da manutenção.");}
         }
     }
+    internal static (string Dir,string Name)[] ExecutableCandidates(System.Runtime.InteropServices.Architecture os){
+        var x86=new[]{("bin","dontstarve_dedicated_server_nullrenderer.exe"),("bin64","dontstarve_dedicated_server_nullrenderer.exe")};
+        var x64=new[]{("bin64","dontstarve_dedicated_server_nullrenderer_x64.exe"),("bin","dontstarve_dedicated_server_nullrenderer_x64.exe")};
+        return os==System.Runtime.InteropServices.Architecture.X86?x86:x64.Concat(x86).ToArray();
+    }
     public static string FindExe(string install){
         SafePath(install);
-        foreach(var dir in new[]{"bin64","bin"})foreach(var name in new[]{"dontstarve_dedicated_server_nullrenderer_x64.exe","dontstarve_dedicated_server_nullrenderer.exe"}){
+        foreach(var (dir,name) in ExecutableCandidates(System.Runtime.InteropServices.RuntimeInformation.OSArchitecture)){
             var p=System.IO.Path.Combine(install,dir,name); if(File.Exists(p)){SafePath(p);return p;}
         }
         throw new IOException("Executável do dedicado não encontrado.");
