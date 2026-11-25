@@ -16,16 +16,31 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: dotnet run --project tests/CoreTests -c Release
-      - run: dotnet publish src/App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o artifacts
+      - name: Build portable Windows packages
+        shell: pwsh
+        run: |
+          foreach ($arch in @('x64','x86','arm64')) {
+            dotnet publish src/App -c Release -r "win-$arch" --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o "artifacts/$arch"
+            if ($LASTEXITCODE -ne 0) { throw "Build $arch falhou" }
+          }
+          $test = Start-Process -FilePath (Resolve-Path 'artifacts/x64/Gerenciador-de-Dedicado.exe') -ArgumentList '--self-test' -PassThru -Wait
+          if ($test.ExitCode -ne 0) { throw 'Smoke test x64 falhou' }
+          $test = Start-Process -FilePath (Resolve-Path 'artifacts/x86/Gerenciador-de-Dedicado.exe') -ArgumentList '--self-test' -PassThru -Wait
+          if ($test.ExitCode -ne 0) { throw 'Smoke test x86 falhou' }
       - name: Check executable and hash
         shell: pwsh
         run: |
-          if (!(Test-Path artifacts/Gerenciador-de-Dedicado.exe)) { throw 'Executável ausente' }
-          (Get-FileHash artifacts/Gerenciador-de-Dedicado.exe -Algorithm SHA256).Hash + '  Gerenciador-de-Dedicado.exe' | Set-Content artifacts/SHA256.txt
+          foreach ($arch in @('x64','x86','arm64')) {
+            $exe = "artifacts/$arch/Gerenciador-de-Dedicado.exe"
+            if (!(Test-Path $exe)) { throw "Executável $arch ausente" }
+            $name = if ($arch -eq 'x64') {'Gerenciador-de-Dedicado.exe'} else {"Gerenciador-de-Dedicado-$arch.exe"}
+            Move-Item $exe "artifacts/$name"
+          }
+          Get-ChildItem artifacts/*.exe | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + $_.Name } | Set-Content artifacts/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Gerenciador-de-Dedicado-1.0.0
           path: |
-            artifacts/Gerenciador-de-Dedicado.exe
+            artifacts/*.exe
             artifacts/SHA256.txt
           if-no-files-found: error
