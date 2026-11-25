@@ -1,0 +1,163 @@
+name: Homologar e publicar tema escuro fixo
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/finalize-dark-only-45709177843.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: finalize-dark-only-45709177843
+  cancel-in-progress: false
+jobs:
+  finalize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: '465092256061e3e6f36495f3cd6a0f459943e5c4'
+      APPROVED_PR_SHA: 'eb4110e3480e7f2bc82081b0caabc2deaa962a1f'
+      PR_RUN: '45708805848'
+      RELEASE_RUN: '45709177843'
+      NEW_TAG: '1.0.0-build-45709177843-1'
+      OLD_TAG: '1.0.0-build-45704640329-1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Validate approved code and exact release pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PR_RUN" | jq -e --arg sha "$APPROVED_PR_SHA" '.head_sha == $sha and .status == "completed" and .conclusion == "success"' >/dev/null
+          pr_tree=$(gh api "repos/$GITHUB_REPOSITORY/commits/$APPROVED_PR_SHA" --jq .commit.tree.sha)
+          release_tree=$(gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA" --jq .commit.tree.sha)
+          test "$pr_tree" = "$release_tree"
+          for attempt in $(seq 1 120); do
+            result=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN")
+            jq -e --arg sha "$EXPECTED_SHA" '.head_sha == $sha and .head_branch == "main" and .run_attempt == 1' <<< "$result" >/dev/null
+            if [[ $(jq -r .status <<< "$result") == completed ]]; then
+              jq -e '.conclusion == "success"' <<< "$result" >/dev/null
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Release pipeline did not finish within the verification window."
+          exit 1
+      - name: Download and verify every public asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$NEW_TAG" > "$RUNNER_TEMP/release.json"
+          jq -e '.draft == false and (.assets | length == 4)' "$RUNNER_TEMP/release.json" >/dev/null
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$NEW_TAG" --jq .sha)" = "$EXPECTED_SHA"
+          mkdir -p "$RUNNER_TEMP/gdd-assets"
+          gh release download "$NEW_TAG" --dir "$RUNNER_TEMP/gdd-assets"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          directory = root / "gdd-assets"
+          names = {"Gerenciador-de-Dedicado.exe", "Gerenciador-de-Dedicado-x86.exe", "Gerenciador-de-Dedicado-arm64.exe"}
+          assets = {a["name"]: a for a in json.loads((root / "release.json").read_text())["assets"]}
+          assert set(assets) == names | {"SHA256.txt"}
+          hashes = {}
+          for line in (directory / "SHA256.txt").read_text(encoding="utf-8-sig").splitlines():
+              m = re.fullmatch(r"([0-9A-Fa-f]{64})\s+(.+)", line)
+              assert m and m[2] not in hashes
+              hashes[m[2]] = m[1].lower()
+          assert set(hashes) == names
+          for name in names | {"SHA256.txt"}:
+              p = directory / name
+              assert p.stat().st_size == assets[name]["size"]
+              with p.open("rb") as f:
+                  digest = hashlib.file_digest(f, "sha256").hexdigest()
+              assert assets[name]["digest"] == "sha256:" + digest
+              if name in names:
+                  assert hashes[name] == digest
+              print("PUBLIC_SHA256_PASS", name, digest)
+          PY
+      - name: Prepare verified site and release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B main origin/main
+          git merge-base --is-ancestor "$EXPECTED_SHA" HEAD
+          git diff --quiet "$EXPECTED_SHA" HEAD -- src tests .github/workflows/release.yml
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          test "$latest" = "$OLD_TAG" || test "$latest" = "$NEW_TAG"
+          python3 - <<'PY'
+          import os, pathlib
+          old, new = os.environ["OLD_TAG"], os.environ["NEW_TAG"]
+          old_id, new_id = old.removeprefix("1.0.0-build-"), new.removeprefix("1.0.0-build-")
+          p = pathlib.Path("docs/index.html")
+          s = p.read_text(encoding="utf-8")
+          def replace(a, b):
+              global s
+              assert s.count(a) == 1, a
+              s = s.replace(a, b)
+          if new not in s:
+              assert s.count(old) == 5
+              s = s.replace(old, new)
+              replace("Build estável " + old_id, "Build estável " + new_id + " — tema escuro fixo")
+              replace('releases/tag/1.0.0-build-45685079390-1">Versão estável anterior', 'releases/tag/' + old + '">Versão estável anterior')
+              replace("actions/runs/45704640329", "actions/runs/" + os.environ["RELEASE_RUN"])
+              replace('<meta name="theme-color" content="#090f1e">', '<meta name="theme-color" content="#090f1e"><meta name="color-scheme" content="dark">')
+              replace("Navegação lateral corrigida em Diagnóstico e Backups, preferências seguras e acabamento visual revisado.", "Tema escuro fixo, sem seletor de aparência. Navegação lateral corrigida em Diagnóstico e Backups, preferências seguras e acabamento visual revisado.")
+              replace("modos simples e avançado, temas e preferências locais.", "modos simples e avançado, tema escuro fixo e preferências locais.")
+              replace("Seus caminhos, seu tema", "Seus caminhos")
+              replace("Salve ou esqueça caminhos locais quando quiser. Escolha tema claro, escuro ou automático. Na nova revisão, aplique o tema sem reiniciar. Nenhum token ou chave Steam é salvo.", "Salve ou esqueça caminhos locais quando quiser. Nenhum token ou chave Steam é salvo. O tema escuro é fixo, sem opções de aparência.")
+              replace("<h3>Escolha o tema</h3><p>Temas claro, escuro e automático, nomes acessíveis e avisos de estado atualizados.", "<h3>Identidade visual escura</h3><p>Tema escuro fixo, nomes acessíveis e avisos de estado atualizados. O alto contraste do Windows é respeitado.")
+              replace("nos temas claro e escuro, em escalas reais", "no tema escuro, em escalas reais")
+              assert s.count(new) == 5
+              assert "Escolha tema claro" not in s and "Escolha o tema" not in s and "color-scheme" in s
+              p.write_text(s, encoding="utf-8")
+          else:
+              assert s.count(new) == 5 and "tema escuro fixo" in s
+          design = pathlib.Path("docs/DESIGN.md")
+          d = design.read_text(encoding="utf-8")
+          if "Tema escuro fixo" not in d:
+              design.write_text(d + "\nTema escuro fixo no site e no aplicativo, sem seletor de aparência. O alto contraste do Windows permanece como recurso de acessibilidade.\n", encoding="utf-8")
+          qa = pathlib.Path("docs/QA-UX.md")
+          q = qa.read_text(encoding="utf-8")
+          if "## Homologação do tema escuro fixo" not in q:
+              q += "\n## Homologação do tema escuro fixo (25/11/2026)\n\n"
+              q += "- PR #30 aprovado; código de release " + os.environ["EXPECTED_SHA"] + " com árvore idêntica à revisão testada. Tema claro, automático e seletor removidos; preferência antiga de tema ignorada; alto contraste do Windows preservado.\n"
+              q += "- Testes locais do núcleo e da interface em 96, 120 e 144 DPI reais, cinco viewports em cada escala; DARK_ONLY_PREFERENCES_PASS, navegação, perímetro, cancelamento, diagnóstico e backups aprovados. Escala original 100% restaurada.\n"
+              q += "- CI do PR 45708805848 e release " + os.environ["RELEASE_RUN"] + " aprovados; autotestes de x64/x86/ARM64, ARM64 nativo e SHA-256 dos três executáveis públicos verificados.\n"
+              q += "- Build " + new + " promovida sem modificar os binários. A homologação online da base permanece documentada acima; nenhuma nova alegação de teste online nesta revisão exclusivamente visual.\n"
+              qa.write_text(q, encoding="utf-8")
+          notes = pathlib.Path(os.environ["RUNNER_TEMP"]) / "release-notes.md"
+          notes.write_text("## Tema escuro fixo\n\n- Tema escuro como única aparência do aplicativo e do site. Seletor e preferências antigas de aparência removidos da interface; alto contraste do Windows preservado.\n- Preferências de caminhos e consulta manual/opcional de atualizações mantidas.\n- Testes reais em 100%, 125% e 150%, regressão do núcleo, interface e autotestes x64/x86/ARM64 aprovados. SHA-256 dos arquivos públicos verificados.\n- Correções anteriores de navegação e bordas preservadas. Sem alteração na manutenção de mundos, sem telemetria e sem atualização silenciosa.\n\nExecutáveis sem assinatura Authenticode. Teste primeiro em um cluster descartável.\n", encoding="utf-8")
+          PY
+          git diff --check
+      - name: Promote exact verified release and publish site
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$NEW_TAG" --prerelease=false --latest --title "Gerenciador de Dedicado 1.0.0 - build ${NEW_TAG#1.0.0-build-} (estável)" --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" | jq -e --arg tag "$NEW_TAG" '.tag_name == $tag and .prerelease == false and .draft == false' >/dev/null
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- docs/index.html docs/DESIGN.md docs/QA-UX.md
+            git commit -m "Publicar versão estável com tema escuro fixo"
+            git push origin HEAD:main
+          fi
+          gh workflow run pages.yml --ref main
+      - name: Confirm exact public download and dark-only text
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="https://github.com/$GITHUB_REPOSITORY/releases/download/$NEW_TAG/Gerenciador-de-Dedicado.exe"
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --location --max-time 20 "https://efac000.github.io/software-dedicado-/?dark-only=$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/public.html" && grep -Fq "$expected" "$RUNNER_TEMP/public.html" && grep -Fq 'Tema escuro fixo, sem seletor de aparência.' "$RUNNER_TEMP/public.html"; then
+              echo "PUBLIC_DARK_ONLY_SITE_PASS $expected"
+              exit 0
+            fi
+            sleep 8
+          done
+          echo "::error::Public site did not show the new verified release within the verification window."
+          exit 1
