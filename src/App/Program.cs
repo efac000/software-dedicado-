@@ -47,10 +47,12 @@ sealed partial class MainForm:Form{
     readonly Label modeHint=new(){AccessibleName="Orientação do modo",Dock=DockStyle.Fill,ForeColor=Muted,TextAlign=ContentAlignment.MiddleLeft};
     Plan? current; bool busy; readonly Dictionary<string,string[]> publishedDependencies=new(StringComparer.Ordinal);
     public MainForm():this(false){}
+    readonly bool smokeMode;
     public MainForm(bool smoke){
+        smokeMode=smoke;
         Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Text="Gerenciador de Dedicado | 1.0.0";MinimumSize=new Size(620,410);Size=new Size(1100,830);AutoScaleMode=AutoScaleMode.Dpi;StartPosition=FormStartPosition.CenterScreen;BackColor=Bg;ForeColor=Ink;Font=new Font("Segoe UI",11);
-        var main=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=15,BackColor=Bg};
+        var main=new BufferedTable{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=15,BackColor=Bg};
         mainLayout=main;
         foreach(var height in new[]{78,46,44,46,46,46,46,46,46})
             main.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
@@ -260,10 +262,12 @@ sealed partial class MainForm:Form{
         UpdateActions();
     }
     void Busy(bool b){
+        bool ended=busy&&!b;
         busy=b;root.Enabled=destinationRoot.Enabled=install.Enabled=source.Enabled=target.Enabled=scan.Enabled=analyze.Enabled=exclusive.Enabled=online.Enabled=!b;
         // Disable path-picker buttons as well.
         foreach(Control row in mainLayout!.Controls)if(row is TableLayoutPanel)row.Enabled=!b;
         diagnose.Enabled=backups.Enabled=!b;activity.Visible=b;foreach(var button in navButtons)button.Enabled=!b;RefreshMode();if(!b)RefreshRecoveryNotice();else UpdateActions();RefreshHome();
+        if(ended&&!smokeMode)RecordActivity();
     }
     async Task Diagnose(){
         var cluster=target.SelectedItem is Cluster c?c.Path:destinationRoot.Text;

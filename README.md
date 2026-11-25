@@ -23,7 +23,7 @@ O programa não encerra servidores em execução, não edita saves, não apaga o
 Os testes de integração usam diretórios temporários e simulam um download incompleto, restauração e sucesso, sem iniciar DST. Um servidor real com Steam Workshop continua necessário para homologação.
 
 ## Compatibilidade
-.NET 10 autocontido: Windows 11 e edições do Windows 10 ainda suportadas pela Microsoft; o aplicativo não requer instalação separada do runtime. Windows 7/8 e Linux/macOS não são suportados. x64 e x86 são verificados em runner Windows x64; ARM64 é compilado, mas exige teste em hardware ARM. A disponibilidade do executável DST depende da plataforma; não prometemos servidor funcional em 32 bits/ARM. SteamCMD e caminhos personalizados de instalação podem ser selecionados manualmente; UGC personalizado continua bloqueado.
+.NET 10 autocontido: Windows 11 e edições do Windows 10 ainda suportadas pela Microsoft; o aplicativo não requer instalação separada do runtime. Windows 7/8 e Linux/macOS não são suportados. x64 e x86 são verificados em runner Windows x64; ARM64 é compilado e executa autotestes e testes de janela em runner Windows ARM64 nativo; isso não homologa o servidor DST nessa arquitetura. A disponibilidade do executável DST depende da plataforma; não prometemos servidor funcional em 32 bits/ARM. SteamCMD e caminhos personalizados de instalação podem ser selecionados manualmente; UGC personalizado continua bloqueado.
 
 ## Compilar
 Requer SDK .NET 10. No Windows: `dotnet run --project src/App`. Testes: `dotnet run --project tests/CoreTests`. Publicação: `dotnet publish src/App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true`.
@@ -31,7 +31,7 @@ Requer SDK .NET 10. No Windows: `dotnet run --project src/App`. Testes: `dotnet 
 ## Distribuição
 [Ações e builds](https://github.com/efac000/software-dedicado-/actions) · [Releases](https://github.com/efac000/software-dedicado-/releases) · [Site (após habilitar Pages)](https://efac000.github.io/software-dedicado-/).
 
-O workflow CI executa testes e compila; a publicação de uma revisão candidata ocorre em alterações do aplicativo na branch principal, após repetir testes e compilação; também pode ser acionada manualmente no workflow Release. O site consulta releases via API e só habilita o download quando encontra um executável publicado. Não há atualização silenciosa. O executável não possui assinatura Authenticode nesta etapa; confirme o SHA-256 junto ao release.
+O workflow CI executa testes e compila; a publicação de uma revisão candidata ocorre em alterações do aplicativo na branch principal, após repetir testes e compilação; também pode ser acionada manualmente no workflow Release. O site aponta explicitamente para a build estável validada; os links são atualizados após homologação. Não há atualização silenciosa. O executável não possui assinatura Authenticode nesta etapa; confirme o SHA-256 junto ao release.
 
 ## Referências
 - [Klei: opções de linha de comando](https://support.klei.com/hc/en-us/articles/360029556192-Dedicated-Server-Command-Line-Options-Guide)
@@ -90,3 +90,6 @@ A suíte de regressão verifica contraste de texto (4,5:1), teclado, nomes acess
 A nova barra lateral permanece disponível na janela principal e se recolhe para ícones em larguras menores. Os cartões exibem tarefas, estado do ambiente e atividade da sessão. Ícones vetoriais originais são desenhados localmente, sem biblioteca paga. Os controles mantêm nomes acessíveis, foco por teclado e temas claro, escuro e automático. O realce ao passar o mouse respeita os efeitos visuais do Windows.
 Os diálogos do aplicativo usam moldura e controles personalizados, com as mesmas confirmações, cancelamento e propriedade modal. Seletores de arquivos e pastas do Windows e a moldura principal nativa permanecem para compatibilidade; o alto contraste conserva controles nativos. O catálogo mostra totais por shard, estados vazios e imagem substituta; o diagnóstico resume gravidade e permite copiar ou exportar um relatório. O registro da sessão pode ser pesquisado e copiado sob solicitação do usuário. A atividade em andamento não inventa porcentagens.
 A camada visual continua em WinForms/.NET; o núcleo funcional não foi reescrito. Os catálogos e fluxos de manutenção ainda usam diálogos modais próprios, não uma migração completa a WPF ou painéis laterais embutidos. Testes de viewport a 96 DPI e UI Automation não substituem avaliação auditiva com leitor de tela ou monitor em outras escalas.
+
+### Revisão de fluidez (candidata)
+Preferências, registro e primeiros passos passam a páginas internas, com aplicação de tema sem reiniciar e gráfico local de contagens diárias, limitado a 30 datas e apagável. Não guarda caminhos, tokens, IDs nem conteúdo de logs no histórico persistente; não representa êxito. Catálogo, diagnóstico e backups ainda mantêm os fluxos existentes. Exige CI e homologação visual antes de distribuição.

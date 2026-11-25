@@ -3,7 +3,7 @@ sealed partial class MainForm{
     Panel? mainHost,homeHost;
     const string FeedbackBase="https://github.com/efac000/software-dedicado-/issues";
     Panel CreateViewport(Control content,int minWidth,int minHeight){
-        var viewport=new Panel{Dock=DockStyle.Fill,AutoScroll=true,BackColor=Bg,TabStop=false};
+        var viewport=new BufferedPanel{Dock=DockStyle.Fill,AutoScroll=true,BackColor=Bg,TabStop=false};
         content.Dock=DockStyle.None;content.Location=Point.Empty;
         viewport.Controls.Add(content);
         bool queued=false;

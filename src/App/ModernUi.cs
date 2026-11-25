@@ -66,19 +66,21 @@ sealed partial class MainForm{
         // All buttons receive consistent disabled and focus treatment.
         bool hover=false,down=false;
         float blend=0;
-        var motion=new System.Windows.Forms.Timer{Interval=25};
+        var motion=new System.Windows.Forms.Timer{Interval=16};
+        Font? titleFont=null,descriptionFont=null;
+        b.FontChanged+=(_,_)=>{titleFont?.Dispose();descriptionFont?.Dispose();titleFont=descriptionFont=null;};
         void Animate(){
-            if(!SystemInformation.UIEffectsEnabled||!b.Enabled){motion.Stop();blend=hover&&b.Enabled?1:0;b.Invalidate();return;}
+            if(!SystemInformation.UIEffectsEnabled||!b.Enabled||!b.Visible){motion.Stop();blend=hover&&b.Enabled?1:0;b.Invalidate();return;}
             motion.Start();
         }
         motion.Tick+=(_,_)=>{
             float target=hover&&b.Enabled?1:0;
-            blend=Math.Abs(target-blend)<=1f/6?target:blend+Math.Sign(target-blend)/6f;
+            blend=Math.Abs(target-blend)<=1f/8?target:blend+Math.Sign(target-blend)/8f;
             b.Invalidate();if(blend==target)motion.Stop();
         };
-        b.Disposed+=(_,_)=>motion.Dispose();
+        b.Disposed+=(_,_)=>{motion.Dispose();titleFont?.Dispose();descriptionFont?.Dispose();};
         b.MouseEnter+=(_,_)=>{hover=true;Animate();};b.MouseLeave+=(_,_)=>{hover=false;down=false;Animate();};
-        b.MouseDown+=(_,_)=>{down=true;b.Invalidate();};b.MouseUp+=(_,_)=>{down=false;b.Invalidate();};
+        b.VisibleChanged+=(_,_)=>{if(!b.Visible){motion.Stop();hover=down=false;blend=0;}};b.MouseDown+=(_,_)=>{down=true;b.Invalidate();};b.MouseUp+=(_,_)=>{down=false;b.Invalidate();};
         b.GotFocus+=(_,_)=>b.Invalidate();b.LostFocus+=(_,_)=>b.Invalidate();b.EnabledChanged+=(_,_)=>{Animate();b.Invalidate();};
         b.Paint+=(_,e)=>{
             var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;
@@ -95,8 +97,8 @@ sealed partial class MainForm{
             if(card){
                 var lines=text.Split('\n',2);int x=scale(16),y=scale(12);
                 Glyph(g,kind,new RectangleF(x,y,iconSize,iconSize),b.Enabled?Accent:Muted);
-                using var title=new Font(b.Font.FontFamily,13,FontStyle.Bold);
-                using var desc=new Font(b.Font.FontFamily,10);
+                var title=titleFont??=new Font(b.Font.FontFamily,13,FontStyle.Bold);
+                var desc=descriptionFont??=new Font(b.Font.FontFamily,10);
                 int ty=y+iconSize+scale(5);
                 if(b.Height<scale(128)){ty=scale(10);x=scale(16)+iconSize+scale(10);}
                 TextRenderer.DrawText(g,lines[0],title,new Rectangle(x,ty,Math.Max(1,r.Width-2*x),scale(24)),fg,TextFormatFlags.EndEllipsis|TextFormatFlags.SingleLine|TextFormatFlags.NoPrefix);
@@ -113,10 +115,10 @@ sealed partial class MainForm{
         };
     }
     void BuildShell(){
-        workspace=new Panel{Dock=DockStyle.Fill,BackColor=Bg};
+        workspace=new BufferedPanel{Dock=DockStyle.Fill,BackColor=Bg};
         Controls.Remove(mainHost!);Controls.Remove(homeHost!);
         workspace.Controls.Add(mainHost!);workspace.Controls.Add(homeHost!);
-        nav=new Panel{Dock=DockStyle.Left,Width=LogicalToDeviceUnits(186),BackColor=PanelColor,AutoScroll=true,Padding=new Padding(6)};
+        nav=new BufferedPanel{Dock=DockStyle.Left,Width=LogicalToDeviceUnits(186),BackColor=PanelColor,AutoScroll=true,Padding=new Padding(6)};
         var stack=new FlowLayoutPanel{Dock=DockStyle.Top,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,BackColor=PanelColor};
         nav.Controls.Add(stack);
         void Add(string name,string glyph,string section,Action action){

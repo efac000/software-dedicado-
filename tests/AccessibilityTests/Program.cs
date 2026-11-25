@@ -80,6 +80,18 @@ static class AccessibilityTests{
                 for(int i=0;i<36;i++){form.SelectNextControl(form.ActiveControl,true,true,true,true);Application.DoEvents();if(form.ActiveControl is Button b)visited.Add(b);}
                 Assert(visited.Count==22&&buttons.All(visited.Contains),"Tab traversal incomplete "+visited.Count);
                 Console.WriteLine("KEYBOARD_TAB_PASS "+theme);
+                if(!SystemInformation.HighContrast){
+                    var prior=form.BackColor;
+                    Call(form,"ShowPreferences");Application.DoEvents();
+                    Assert(Field<Panel>(form,"internalPage").Visible&&!host.Visible&&!mainHost.Visible,"Preferences not embedded");
+                    Call(form,"ApplyLiveTheme",theme=="dark"?"light":"dark");Application.DoEvents();
+                    Assert(form.BackColor.ToArgb()!=prior.ToArgb(),"Live palette not applied");
+                    Call(form,"ApplyLiveTheme",theme);Call(form,"ShowHome");Application.DoEvents();
+                    Assert(form.BackColor.ToArgb()==prior.ToArgb()&&host.Visible,"Theme or navigation restore failed");
+                    Call(form,"ShowSessionLog");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"History not embedded");
+                    Call(form,"ShowHome");Call(form,"ShowGettingStarted");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"Guide not embedded");
+                    Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_PAGES_AND_LIVE_THEME_PASS "+theme);
+                }
                 var state=Field<Label>(form,"homeState");
                 Assert(state.AccessibilityObject.Name?.Contains("QA Accessibility")==true,"Status accessible name not updated");
                 Assert(state.LiveSetting==System.Windows.Forms.Automation.AutomationLiveSetting.Polite,"Status missing live setting");
