@@ -131,6 +131,7 @@ static class AccessibilityTests{
                     var catalog=Field<Panel>(form,"taskPageHost");
                     var shardSelector=Desc(catalog).OfType<ComboBox>().Single(c=>c.AccessibleName=="Shard selecionado");
                     shardSelector.SelectedItem="Caves";
+                    Assert(Desc(catalog).OfType<Label>().Any(l=>l.Text=="ID / link:")&&Desc(catalog).OfType<Label>().Any(l=>l.Text=="Filtro:"),"Catalog input labels missing");
                     var idField=Desc(catalog).OfType<TextBox>().Single(c=>c.AccessibleName=="Adicionar por ID ou link Workshop");
                     var add=Desc(catalog).OfType<Button>().Single(c=>c.Text=="Adicionar / ativar");
                     WaitFor(()=>add.Enabled,"Offline catalog lookup did not finish");idField.Text="123456789";add.PerformClick();
@@ -144,7 +145,8 @@ static class AccessibilityTests{
                     WaitFor(()=>Field<Panel>(form,"taskPageHost") is Panel page&&page.Name=="task-diagnostic"&&Desc(page).OfType<DataGridView>().Any()||diag.IsCompleted,"Diagnostic did not open");
                     Assert(!diag.IsCompleted,"Diagnostic ended before display: "+Field<TextBox>(form,"log").Text);
                     var diagnosticPage=Field<Panel>(form,"taskPageHost");
-                    Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing: "+Field<TextBox>(form,"log").Text);Capture(form,"diagnostic-"+theme);
+                    Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing: "+Field<TextBox>(form,"log").Text);
+                    Assert(Desc(diagnosticPage).OfType<Label>().Any(l=>l.Text=="Pesquisar:"),"Diagnostic search label missing");Capture(form,"diagnostic-"+theme);
                     Desc(diagnosticPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar do diagnóstico").PerformClick();
                     WaitFor(()=>diag.IsCompleted,"Diagnostic did not return");
                     Assert(diag.IsCompletedSuccessfully&&mainHost.Visible,"Diagnostic did not restore workspace");

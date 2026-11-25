@@ -300,7 +300,7 @@ sealed partial class MainForm:Form{
             var filter=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=160,BackColor=PanelColor,ForeColor=Ink,AccessibleName="Filtrar diagnóstico por categoria"};
             filter.Items.AddRange(new object[]{"Todos","Erros","Avisos","Informações"});filter.SelectedIndex=0;
             var query=new TextBox{Width=225,PlaceholderText="Filtrar problema, ID ou local",BackColor=PanelColor,ForeColor=Ink,AccessibleName="Filtrar problema, ID ou local"};
-            var filters=new FlowLayoutPanel{Dock=DockStyle.Top,Height=42};filters.Controls.Add(filter);filters.Controls.Add(query);
+            var filters=new FlowLayoutPanel{Dock=DockStyle.Top,Height=42};filters.Controls.Add(filter);filters.Controls.Add(new Label{Text="Pesquisar:",AutoSize=true,ForeColor=Muted,Margin=new Padding(4,8,2,0)});filters.Controls.Add(query);
             var controls=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=76,FlowDirection=FlowDirection.RightToLeft,WrapContents=true,AutoScroll=true};
             var close=new Button{Text="Voltar",AccessibleName="Voltar do diagnóstico"};var export=new Button{Text="Salvar relatório TXT"};var prepare=new Button{Text="Preparar operação",Enabled=false};Style(close);Style(export);Style(prepare);
             var guidance=new Label{Dock=DockStyle.Bottom,Height=44,ForeColor=Muted,Text="Selecione uma ocorrência para ver se há uma operação assistida."};
@@ -420,7 +420,9 @@ sealed partial class MainForm:Form{
         table.AccessibleName="Mods do shard selecionado";
         input.AccessibleName="Adicionar por ID ou link Workshop";
         search.AccessibleName="Filtrar catálogo por nome ou ID";
-        controls.Controls.AddRange(new Control[]{shard,input,add,toggle,options,search,browseWorkshop,refresh,open});
+        var idLabel=new Label{Text="ID / link:",AutoSize=true,Margin=new Padding(4,8,2,0),ForeColor=Muted};
+        var searchLabel=new Label{Text="Filtro:",AutoSize=true,Margin=new Padding(4,8,2,0),ForeColor=Muted};
+        controls.Controls.AddRange(new Control[]{shard,idLabel,input,add,toggle,options,searchLabel,search,browseWorkshop,refresh,open});
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};actions.Controls.Add(cancel);actions.Controls.Add(ok);
         dialog.Controls.Add(table);dialog.Controls.Add(panel);dialog.Controls.Add(message);dialog.Controls.Add(actions);dialog.Controls.Add(controls);dialog.Controls.Add(catalogSummary);
         var chart=new BufferedPanel{Dock=DockStyle.Top,Height=14,BackColor=PanelColor,AccessibleName="Proporção de mods ativos e desativados"};dialog.Controls.Add(chart);

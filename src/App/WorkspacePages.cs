@@ -165,7 +165,7 @@ sealed partial class MainForm{
         var filter=new TextBox{Width=180,PlaceholderText="Buscar no registro",BackColor=PanelColor,ForeColor=Ink,AccessibleName="Pesquisar registro"};
         filter.TextChanged+=(_,_)=>contents.Text=string.Join(Environment.NewLine,snapshot.Split('\n').Where(line=>line.Contains(filter.Text,StringComparison.OrdinalIgnoreCase)).Select(line=>line.TrimEnd('\r')));
         var copy=new Button{Text="Copiar visualização"};Style(copy);copy.Click+=(_,_)=>{try{if(contents.TextLength>0)Clipboard.SetText(contents.Text);}catch{Notice.Show(this,"Não foi possível copiar. Use Ctrl+C.","Registro");}};
-        var tools=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true};tools.Controls.AddRange(new Control[]{filter,copy});
+        var tools=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true};tools.Controls.AddRange(new Control[]{new Label{Text="Pesquisar:",AutoSize=true,ForeColor=Muted,Margin=new Padding(4,8,2,0)},filter,copy});
         var clear=new Button{Text="Apagar contagens locais"};Style(clear);clear.Click+=(_,_)=>{if(Notice.Show(this,"Apagar o histórico local de contagens?","Registro",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;try{if(File.Exists(ActivityPath))File.Delete(ActivityPath);RenderChart();}catch{Notice.Show(this,"Não foi possível apagar o histórico.","Registro");}};
         var back=new Button{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();
         var footer=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true};footer.Controls.AddRange(new Control[]{clear,back});

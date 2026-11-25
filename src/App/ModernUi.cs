@@ -140,7 +140,7 @@ sealed partial class MainForm{
         Add("Feedback","chat","feedback",ShowFeedback);
         Controls.Add(workspace);Controls.Add(nav);
         void LayoutNav(){
-            int width=ClientSize.Width>=LogicalToDeviceUnits(1050)||SystemInformation.HighContrast?LogicalToDeviceUnits(186):LogicalToDeviceUnits(52);
+            int width=ClientSize.Width>=LogicalToDeviceUnits(1024)||SystemInformation.HighContrast?LogicalToDeviceUnits(186):LogicalToDeviceUnits(52);
             nav.Width=width;
             foreach(var b in navButtons)b.Width=Math.Max(20,width-LogicalToDeviceUnits(16));
         }
