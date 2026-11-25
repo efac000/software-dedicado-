@@ -10,7 +10,7 @@ public static class SteamUpdate {
         return a.Equals(b,StringComparison.OrdinalIgnoreCase)||a.StartsWith(b+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);
     }
     public static void Check(string steamcmd,Cluster target,string install){
-        if(!Path.IsPathFullyQualified(steamcmd)||!Path.GetFileName(steamcmd).Equals("steamcmd.exe",StringComparison.OrdinalIgnoreCase)||!File.Exists(steamcmd))throw new IOException("Selecione o steamcmd.exe oficial já instalado.");
+        if(string.IsNullOrWhiteSpace(steamcmd)||!Path.IsPathFullyQualified(steamcmd)||!Path.GetFileName(steamcmd).Equals("steamcmd.exe",StringComparison.OrdinalIgnoreCase)||!File.Exists(steamcmd))throw new IOException("Selecione o steamcmd.exe oficial já instalado.");
         Engine.SafePath(steamcmd);
         if(!Path.IsPathFullyQualified(install)||!Directory.Exists(install))throw new IOException("Instalação dedicada inválida.");
         Engine.FindExe(install);
