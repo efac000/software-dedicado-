@@ -134,10 +134,24 @@ try{
     var originalDiag=File.ReadAllBytes(diagOverride);
     var issues=Diagnostics.Inspect(diagDir,install);
     foreach(var code in new[]{"TOKEN_MISSING","PORT_DUPLICATE","SHARD_ROLE","MOD_CACHE","SETUP_MISSING","SETUP_EXTRA","LOG_LUA","LOG_WORKSHOP","LOG_PORT","LOG_VERSION","OVERRIDES_MISSING"})Check(issues.Any(f=>f.Code==code),"Diagnóstico não detectou "+code);
+
+    Check(Diagnostics.ActionFor(issues.First(x=>x.Code=="MOD_CACHE"))==DiagnosticAction.RepairMods,"Cache não encaminhou ao reparo");
+    Check(Diagnostics.ActionFor(issues.First(x=>x.Code=="LOG_LUA"))==DiagnosticAction.ManageMods,"Lua não encaminhou ao catálogo");
+    Check(Diagnostics.ActionFor(issues.First(x=>x.Code=="PORT_DUPLICATE"))==DiagnosticAction.None,"Porta recebeu reparo automático");
+    Check(!Diagnostics.CanPrepare(issues),"Setup extra deveria bloquear atalho");
+    var cacheOnly=new Finding(Severity.Warning,"MOD_CACHE","Master","Cache","Reparar");
+    Check(Diagnostics.CanPrepare(new[]{cacheOnly}),"Atalho seguro bloqueado");
+    foreach(var code in new[]{"SETUP_EXTRA","SHARED_UGC","FORCED_MODS","RUNNING","LOW_DISK","CUSTOM_CLUSTER"})Check(!Diagnostics.CanPrepare(new[]{cacheOnly,new Finding(Severity.Warning,code,"x","x","x")}),"Bloqueio ignorado: "+code);
+    Check(!Diagnostics.CanPrepare(new[]{new Finding(Severity.Error,"READ_FAILED","x","x","x")}),"Erro de leitura ignorado");
+    Check(Engine.TreeBytes(diagDir)>0,"Estimativa de backup vazia");
+    Check(Engine.RequiredBackupBytes(0)==64L*1024*1024,"Reserva mínima incorreta");
+    Check(Engine.RequiredBackupBytes(2_000_000_000)==2_100_000_000,"Reserva proporcional incorreta");
     Check(!string.Join("\n",issues).Contains("private-secret"),"Log privado vazou");
     Check(File.ReadAllBytes(diagOverride).SequenceEqual(originalDiag),"Diagnóstico alterou configuração");
     File.WriteAllText(diagOverride,"return os.execute('x')");
-    Check(Diagnostics.Inspect(diagDir,install).Any(f=>f.Code=="READ_FAILED"),"Lua inválido não detectado");
+    var incomplete=Diagnostics.Inspect(diagDir,install);
+    Check(incomplete.Any(f=>f.Code=="READ_FAILED"),"Lua inválido não detectado");
+    Check(incomplete.Any(f=>f.Code=="SETUP_INCOMPLETE")&&!incomplete.Any(f=>f.Code=="SETUP_EXTRA"),"Comparação extra indevida com Lua inválido");
     Check(Diagnostics.Inspect(Path.Combine(root,"inexistente"),install).Any(f=>f.Code=="CLUSTER_MISSING"),"Cluster inexistente não detectado");
     var logPath=Path.Combine(diagDir,"Master","server_log.txt");
     File.WriteAllText(logPath,"LUA ERROR\n"+new string('x',300000)+"\nfailed to download mod");

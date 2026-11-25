@@ -104,7 +104,7 @@ sealed class MainForm:Form{
             if(Directory.Exists(cluster))picker.SelectedPath=cluster;
             if(picker.ShowDialog(this)!=DialogResult.OK)return;cluster=picker.SelectedPath;
         }
-        var installation=install.Text;Busy(true);
+        var installation=install.Text;var next=DiagnosticAction.None;Busy(true);
         try{
             status.Text="Diagnóstico em leitura...";
             var findings=await Task.Run(()=>Diagnostics.Inspect(cluster,installation,Write));
@@ -114,15 +114,61 @@ sealed class MainForm:Form{
             list.ColumnHeadersDefaultCellStyle.BackColor=Raised;list.ColumnHeadersDefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.BackColor=Bg;list.DefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.SelectionBackColor=Raised;list.DefaultCellStyle.SelectionForeColor=Accent;list.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
             foreach(var name in new[]{"Gravidade","Local","Problema","Ação recomendada"})list.Columns.Add(name,name);
             list.Columns[0].FillWeight=45;list.Columns[1].FillWeight=75;list.Columns[2].FillWeight=150;list.Columns[3].FillWeight=180;
-            foreach(var f in findings)list.Rows.Add(f.Level==Severity.Error?"Erro":f.Level==Severity.Warning?"Aviso":"Informação",f.Scope,f.Problem,f.Advice);
+
+            var filter=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=160,BackColor=PanelColor,ForeColor=Ink};
+            filter.Items.AddRange(new object[]{"Todos","Erros","Avisos","Informações"});filter.SelectedIndex=0;
+            var query=new TextBox{Width=225,PlaceholderText="Filtrar problema, ID ou local",BackColor=PanelColor,ForeColor=Ink};
+            var filters=new FlowLayoutPanel{Dock=DockStyle.Top,Height=42};filters.Controls.Add(filter);filters.Controls.Add(query);
             var controls=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};
-            var close=new Button{Text="Fechar",DialogResult=DialogResult.OK};var export=new Button{Text="Salvar relatório TXT"};Style(close);Style(export);
-            export.Click+=(_,_)=>{using var save=new SaveFileDialog{Filter="Relatório de texto (*.txt)|*.txt",FileName="Diagnostico-Dedicado.txt"};if(save.ShowDialog(dialog)==DialogResult.OK)try{
-                File.WriteAllLines(save.FileName,new[]{"Gerenciador de Dedicado 1.0.0","Diagnóstico limitado e somente leitura; sem tokens ou linhas brutas de log."}.Concat(findings.Select(f=>$"[{f.Level}] {f.Code} | {f.Scope}\n{f.Problem}\n{f.Advice}\n")),Encoding.UTF8);
+            var close=new Button{Text="Fechar",DialogResult=DialogResult.Cancel};var export=new Button{Text="Salvar relatório TXT"};var prepare=new Button{Text="Preparar operação",Enabled=false};Style(close);Style(export);Style(prepare);
+            var guidance=new Label{Dock=DockStyle.Bottom,Height=44,ForeColor=Muted,Text="Selecione uma ocorrência para ver se há uma operação assistida."};
+            bool allowed=Diagnostics.CanPrepare(findings);
+            Finding? Selected()=>list.CurrentRow?.Tag as Finding;
+            void UpdateAction(){
+                var item=Selected();var action=item==null?DiagnosticAction.None:Diagnostics.ActionFor(item);
+                prepare.Enabled=allowed&&action!=DiagnosticAction.None;
+                prepare.Text=action==DiagnosticAction.RepairMods?"Preparar reinstalação":action==DiagnosticAction.ManageMods?"Abrir catálogo de mods":"Preparar operação";
+                guidance.Text=!allowed?"Há bloqueios de segurança. Resolva os erros/avisos impeditivos e execute novo diagnóstico.":action==DiagnosticAction.None?"Este item exige revisão manual; não existe correção automática segura.":"O atalho apenas prepara uma nova análise; backup e duas confirmações continuam obrigatórios.";
+            }
+            void Populate(){
+                list.Rows.Clear();
+                foreach(var f in findings){
+                    if(filter.SelectedIndex>0&&(int)f.Level!=filter.SelectedIndex-1)continue;
+                    if(!string.Join(" ",f.Code,f.Scope,f.Problem,f.Advice).Contains(query.Text,StringComparison.OrdinalIgnoreCase))continue;
+                    int row=list.Rows.Add(f.Level==Severity.Error?"Erro":f.Level==Severity.Warning?"Aviso":"Informação",f.Scope,f.Problem,f.Advice);list.Rows[row].Tag=f;
+                }
+                UpdateAction();
+            }
+            filter.SelectedIndexChanged+=(_,_)=>Populate();query.TextChanged+=(_,_)=>Populate();list.SelectionChanged+=(_,_)=>UpdateAction();
+            prepare.Click+=(_,_)=>{var f=Selected();if(f==null||!allowed)return;next=Diagnostics.ActionFor(f);if(next!=DiagnosticAction.None)dialog.DialogResult=DialogResult.OK;};
+            Populate();
+            export.Click+=(_,_)=>{using var save=new SaveFileDialog{Filter="Relatório de texto (*.txt)|*.txt",FileName="Diagnostico-Dedicado-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".txt",OverwritePrompt=false};if(save.ShowDialog(dialog)==DialogResult.OK)try{
+                Engine.SafePath(save.FileName);
+                using var stream=new FileStream(save.FileName,FileMode.CreateNew,FileAccess.Write,FileShare.None);
+                using var writer=new StreamWriter(stream,Encoding.UTF8);
+                foreach(var line in new[]{"Gerenciador de Dedicado 1.0.0","Diagnóstico limitado e somente leitura; sem tokens ou linhas brutas de log."}.Concat(findings.Select(f=>$"[{f.Level}] {f.Code} | {f.Scope}\n{f.Problem}\n{f.Advice}\n")))writer.WriteLine(line);
             }catch(Exception e){MessageBox.Show(dialog,e.Message,"Falha ao salvar");}};
-            controls.Controls.Add(close);controls.Controls.Add(export);dialog.Controls.Add(list);dialog.Controls.Add(header);dialog.Controls.Add(controls);dialog.ShowDialog(this);
+
+            controls.Controls.Add(close);controls.Controls.Add(export);controls.Controls.Add(prepare);dialog.Controls.Add(list);dialog.Controls.Add(filters);dialog.Controls.Add(header);dialog.Controls.Add(guidance);dialog.Controls.Add(controls);dialog.CancelButton=close;dialog.ShowDialog(this);
             status.Text="Diagnóstico concluído. Nenhuma alteração no dedicado.";
-        }catch(Exception e){Write("Diagnóstico não concluído: "+e.Message);status.Text="Diagnóstico incompleto.";}finally{Busy(false);}
+        }catch(Exception e){next=DiagnosticAction.None;Write("Diagnóstico não concluído: "+e.Message);status.Text="Diagnóstico incompleto.";}finally{Busy(false);}
+        if(next!=DiagnosticAction.None){
+            try{
+                // Bind the shortcut to the exact diagnosed directory, not to its displayed number.
+                var expected=Path.GetFullPath(cluster);var name=Path.GetFileName(Path.TrimEndingDirectorySeparator(expected));
+                if(!name.StartsWith("Cluster_",StringComparison.Ordinal)||!Engine.ValidNumber(name[8..]))throw new IOException("Cluster não suportado para reparo automático.");
+                var fresh=Engine.Load(Path.GetDirectoryName(expected)!,name[8..]);
+                if(!fresh.Path.Equals(expected,StringComparison.OrdinalIgnoreCase))throw new IOException("Destino do diagnóstico divergente.");
+                Engine.Offline();
+                exclusive.Checked=false;mode.SelectedIndex=next==DiagnosticAction.RepairMods?1:2;
+                destinationRoot.Text=expected;RefreshClusters();
+                var index=target.Items.Cast<Cluster>().ToList().FindIndex(c=>c.Path.Equals(expected,StringComparison.OrdinalIgnoreCase));
+                if(index<0)throw new IOException("O cluster diagnosticado não está mais disponível.");
+                target.SelectedIndex=index;
+                Write("Operação assistida: preparando nova análise para "+fresh.Name+". Nenhum reset autorizado.");
+                await Analyze();
+            }catch(Exception e){InvalidatePlan();Write("Operação assistida bloqueada: "+e.Message);}
+        }
     }
     async Task Analyze(){
         InvalidatePlan();
