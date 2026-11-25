@@ -73,6 +73,30 @@ try{
     Reject(()=>Engine.Run(Engine.Analyze(s,t,install),_=>{},backups,()=>{},(_,_,_,_,_)=>{}));
     Directory.Delete(other,true);Directory.Delete(Path.GetDirectoryName(other)!);
     World("1","return { ['workshop-43']={enabled=true} }");
+
     Check(plan.Fingerprint!=Engine.Analyze(Engine.Load(conf,"1"),t,install).Fingerprint,"Plano não invalidado");
+    // Repair the dedicated cluster in place; the normal copy path still rejects same source/destination.
+    var repair=Engine.AnalyzeRepair(t,install);
+    var beforeRepair=File.ReadAllBytes(overridePath);
+    Check(repair.InPlace&&!repair.Edited&&repair.Ids.SequenceEqual(new[]{"42"}),"Plano de reparo inválido");
+    Reject(()=>Engine.Analyze(t,t,install));
+    Reject(()=>Engine.AnalyzeRepair(t,install,new Dictionary<string,byte[]>{{"Caves",beforeRepair}}));
+    Reject(()=>Engine.AnalyzeRepair(t,install,new Dictionary<string,byte[]>{{"Master",System.Text.Encoding.UTF8.GetBytes("return os.execute('x')")}}));
+    var changed=System.Text.Encoding.UTF8.GetBytes("return { ['workshop-43']={enabled=true,configuration_options={foo=1}} }");
+    var edits=new Dictionary<string,byte[]>{{"Master",changed}};
+    Reject(()=>Engine.AnalyzeRepair(t,install,edits,"not-the-baseline"));
+    var edit=Engine.AnalyzeRepair(t,install,edits,repair.Fingerprint);
+    Check(edit.InPlace&&edit.Edited&&edit.Ids.SequenceEqual(new[]{"43"})&&edit.Shards[0].Old.SequenceEqual(new[]{"42"}),"Plano de edição inválido");
+    Check(File.ReadAllBytes(overridePath).SequenceEqual(beforeRepair),"Edição prematura");
+    Reject(()=>Engine.Run(edit,_=>{},backups,()=>{},(_,_,_,_,_)=>{}));
+    Check(File.ReadAllBytes(overridePath).SequenceEqual(beforeRepair),"Rollback da edição falhou");
+    void Download(Plan p,ShardPlan sh,string ugc,string backup,Action<string> log){foreach(var id in sh.Wanted){var dir=Path.Combine(ugc,"content","322330",id);Directory.CreateDirectory(dir);File.WriteAllText(Path.Combine(dir,"modinfo.lua"),"name='Teste'");}}
+    Engine.Run(repair,_=>{},backups,()=>{},Download);
+    Check(File.ReadAllBytes(overridePath).SequenceEqual(beforeRepair),"Reparo mudou opções");
+    edit=Engine.AnalyzeRepair(t,install,edits,Engine.AnalyzeRepair(t,install).Fingerprint);
+    Engine.Run(edit,_=>{},backups,()=>{},Download);
+    Check(File.ReadAllBytes(overridePath).SequenceEqual(changed),"Edição não aplicada");
+    Check(File.ReadAllText(setupFile).Contains("ServerModSetup(\"43\")"),"Setup não acompanhou edição");
+    Check(File.ReadAllText(Path.Combine(save,"world"))=="save-intacto","Reparo/edição alterou save");
 }finally{Directory.Delete(root,true);}
 Console.WriteLine("Testes de parser, entradas, clusters, simulação e fingerprint passaram.");

@@ -8,7 +8,7 @@ public record Cluster(string Path,string Name,string Number,string[] Shards) {
     public override string ToString()=> $"Cluster_{Number} — {Name} ({System.IO.Path.GetDirectoryName(Path)})";
 }
 public record ShardPlan(string Name,byte[] Content,string[] Wanted,string[] Old);
-public record Plan(Cluster Source,Cluster Target,string Install,string Exe,ShardPlan[] Shards,string Fingerprint) {
+public record Plan(Cluster Source,Cluster Target,string Install,string Exe,ShardPlan[] Shards,string Fingerprint,bool InPlace=false,bool Edited=false) {
     public string[] Ids=>Shards.SelectMany(x=>x.Wanted).Distinct().Order().ToArray();
 }
 public static class Engine {
@@ -78,10 +78,14 @@ public static class Engine {
             p+=m.Length;
         }
     }
-    public static Plan Analyze(Cluster source,Cluster target,string install){
+    public static Plan Analyze(Cluster source,Cluster target,string install)=>AnalyzeInternal(source,target,install,false,null,null);
+    // In-place repair is explicit; copying a world onto itself remains prohibited.
+    public static Plan AnalyzeRepair(Cluster target,string install,IReadOnlyDictionary<string,byte[]>? proposed=null,string? expectedBaseline=null)=>AnalyzeInternal(target,target,install,true,proposed,expectedBaseline);
+    static Plan AnalyzeInternal(Cluster source,Cluster target,string install,bool inPlace,IReadOnlyDictionary<string,byte[]>? proposed,string? expectedBaseline){
         if(string.IsNullOrWhiteSpace(install)||!Directory.Exists(install))throw new IOException("Selecione uma instalação válida do servidor dedicado.");
         install=System.IO.Path.GetFullPath(install);
-        if(string.Equals(source.Path,target.Path,StringComparison.OrdinalIgnoreCase))throw new ArgumentException("Origem igual ao destino.");
+        if(string.Equals(source.Path,target.Path,StringComparison.OrdinalIgnoreCase)!=inPlace)throw new ArgumentException("Origem igual ao destino no modo de cópia.");
+        if(proposed!=null&&(!inPlace||proposed.Count!=target.Shards.Length||target.Shards.Any(s=>!proposed.ContainsKey(s))))throw new ArgumentException("A edição precisa corresponder aos shards do destino.");
         if(!source.Shards.SequenceEqual(target.Shards))throw new ArgumentException("Master/Caves precisam corresponder entre os mundos.");
         var exe=FindExe(install);
         if(IsWithin(source.Path,install)||IsWithin(target.Path,install)||IsWithin(install,source.Path)||IsWithin(install,target.Path))throw new IOException("A instalação e os clusters devem ficar em pastas separadas.");
@@ -94,20 +98,26 @@ public static class Engine {
         if(File.Exists(settings)&&Regex.IsMatch(File.ReadAllText(settings),@"(?m)^\s*(ForceEnableMod|ForceDisableMod)\s*\("))throw new IOException("modsettings.lua contém regras forçadas; revise manualmente.");
         var setupBytes=Read(setup,false);
         // Capture each override once; missing and empty-table files are different states.
-        var fingerprintParts=new List<string>{source.Path,target.Path,install,exe,FileHash(Path.Combine(source.Path,"cluster.ini")),FileHash(Path.Combine(target.Path,"cluster.ini")),setupBytes is null?"missing":Hash(setupBytes),File.Exists(settings)?FileHash(settings):"missing"};
+        var fingerprintParts=new List<string>{inPlace?"reparo":"copia",source.Path,target.Path,install,exe,FileHash(Path.Combine(source.Path,"cluster.ini")),FileHash(Path.Combine(target.Path,"cluster.ini")),setupBytes is null?"missing":Hash(setupBytes),File.Exists(settings)?FileHash(settings):"missing"};
         var shards=source.Shards.Select(s=>{
             var data=Read(Override(source,s),true)!;
-            var previous=Read(Override(target,s),false);
+            var previous=inPlace?data:Read(Override(target,s),false);
             var sourceIni=Path.Combine(source.Path,s,"server.ini");
             var targetIni=Path.Combine(target.Path,s,"server.ini");
             SafePath(sourceIni);SafePath(targetIni);
             fingerprintParts.AddRange(new[]{s,FileHash(sourceIni),FileHash(targetIni),Hash(data),previous is null?"missing":Hash(previous)});
-            return new ShardPlan(s,data,Ids(data),previous is null?[]:Ids(previous));
+            var wanted=proposed is null?data:proposed[s].ToArray();
+            if(wanted.Length>4_000_000)throw new IOException("Arquivo Lua editado grande demais.");
+            return new ShardPlan(s,wanted,Ids(wanted),previous is null?[]:Ids(previous));
         }).ToArray();
-        if(!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado.");
+
+        if(!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado; remoção integral não suportada.");
         CheckSetup(setupBytes,shards.SelectMany(s=>s.Old.Concat(s.Wanted)).ToHashSet(StringComparer.Ordinal));
+        var baseline=Hash(Utf8.GetBytes(System.Text.Json.JsonSerializer.Serialize(fingerprintParts)));
+        if(expectedBaseline!=null&&baseline!=expectedBaseline)throw new IOException("Arquivos mudaram durante a edição; analise novamente.");
+        if(proposed!=null){fingerprintParts.Add("edicao");fingerprintParts.AddRange(shards.Select(s=>Hash(s.Content)));}
         var fingerprint=Hash(Utf8.GetBytes(System.Text.Json.JsonSerializer.Serialize(fingerprintParts)));
-        return new(source,target,install,exe,shards,fingerprint);
+        return new(source,target,install,exe,shards,fingerprint,inPlace,proposed!=null);
     }
     static bool IsWithin(string path,string parent){var a=Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);var b=Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar);return a.Equals(b,StringComparison.OrdinalIgnoreCase)||a.StartsWith(b+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}
     static void CopyTree(string source,string dest){
@@ -131,7 +141,8 @@ public static class Engine {
         offline();
         var source=Load(System.IO.Path.GetDirectoryName(plan.Source.Path)!,plan.Source.Number);
         var target=Load(System.IO.Path.GetDirectoryName(plan.Target.Path)!,plan.Target.Number);
-        var fresh=Analyze(source,target,plan.Install);
+        Plan Reanalyze(Plan p,Cluster a,Cluster b)=>p.InPlace?AnalyzeRepair(b,p.Install,p.Edited?p.Shards.ToDictionary(s=>s.Name,s=>s.Content):null):Analyze(a,b,p.Install);
+        var fresh=Reanalyze(plan,source,target);
         if(fresh.Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram; analise e confirme novamente.");
         var id=DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8];
         plan=fresh;
@@ -158,11 +169,11 @@ public static class Engine {
         var journal=System.IO.Path.Combine(backup,"recovery.txt");
         File.WriteAllLines(journal,new[]{"Origem: "+source.Path,"Destino: "+target.Path,"Instalação: "+plan.Install,"Quarentena: "+quarantine,"Setup anterior: "+(originals[setup]!=null?"presente":"ausente")}.Concat(caches.Select((x,i)=>x+" -> "+System.IO.Path.Combine(quarantine,i.ToString()))));
         offline();
-        if(Analyze(Load(Path.GetDirectoryName(source.Path)!,source.Number),Load(Path.GetDirectoryName(target.Path)!,target.Number),plan.Install).Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram durante o backup; nenhuma manutenção executada.");
+        if(Reanalyze(plan,Load(Path.GetDirectoryName(source.Path)!,source.Number),Load(Path.GetDirectoryName(target.Path)!,target.Number)).Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram durante o backup; nenhuma manutenção executada.");
         var newPaths=affected.Select(x=>Path.Combine(mods,"workshop-"+x)).Concat(target.Shards.Select(s=>Path.Combine(ugc,s))).Where(p=>!Directory.Exists(p)).ToArray();
         try{
             foreach(var p in caches){var q=System.IO.Path.Combine(quarantine,moved.Count.ToString());Directory.Move(p,q);moved.Add((p,q));}
-            foreach(var s in plan.Shards){var p=Override(target,s.Name);touched.Add(p);Atomic(p,s.Content);}
+            foreach(var s in plan.Shards){var p=Override(target,s.Name);if(originals[p] is byte[] oldBytes&&oldBytes.AsSpan().SequenceEqual(s.Content))continue;touched.Add(p);Atomic(p,s.Content);}
             touched.Add(setup);Atomic(setup,Utf8.GetBytes("-- Gerenciador de Dedicado 1.0.0\n"+string.Join("\n",plan.Ids.Select(x=>"ServerModSetup(\""+x+"\")"))+"\n"));
             foreach(var s in plan.Shards.OrderBy(s=>s.Name=="Master"?0:1)){
                 offline();var ugcShard=Path.Combine(ugc,s.Name);SafePath(ugcShard);
@@ -198,11 +209,20 @@ public static class Engine {
         var conf=Path.GetDirectoryName(plan.Target.Path)!;var storage=Path.GetDirectoryName(conf)??throw new IOException("Caminho de cluster inválido.");
         foreach(var arg in new[]{"-persistent_storage_root",storage,"-conf_dir",Path.GetFileName(conf)!,"-cluster","Cluster_"+plan.Target.Number,"-shard",s.Name,"-ugc_directory",ugcShard,"-only_update_server_mods"})start.ArgumentList.Add(arg);
         log("Atualizando "+s.Name+"...");using var proc=Process.Start(start)??throw new IOException("Falha ao iniciar atualizador.");
-        var output=proc.StandardOutput.ReadToEndAsync();var errors=proc.StandardError.ReadToEndAsync();
-        bool timeout=!proc.WaitForExit(30*60*1000);
-        if(timeout){proc.Kill(true);if(!proc.WaitForExit(10000))throw new IOException("Atualizador não encerrou após o limite.");}
-        var report=output.GetAwaiter().GetResult()+"\n"+errors.GetAwaiter().GetResult();
-        File.WriteAllText(Path.Combine(backup,s.Name+"-update.log"),report);
-        if(timeout||proc.ExitCode!=0||Regex.IsMatch(report,@"(?im)(#ERROR:|failed to (download|install|update)|error downloading|workshop.*timed out)"))throw new IOException("Atualizador informou falha ou excedeu o limite em "+s.Name+".");
+
+        // Stream directly to disk instead of accumulating both outputs in memory.
+        var outputPath=Path.Combine(backup,s.Name+"-update.log");
+        var errorPath=Path.Combine(backup,s.Name+"-update.stderr.log");
+        bool timeout;
+        using(var outputFile=new FileStream(outputPath,FileMode.CreateNew,FileAccess.Write,FileShare.Read))
+        using(var errorFile=new FileStream(errorPath,FileMode.CreateNew,FileAccess.Write,FileShare.Read)){
+            var output=proc.StandardOutput.BaseStream.CopyToAsync(outputFile);
+            var errors=proc.StandardError.BaseStream.CopyToAsync(errorFile);
+            timeout=!proc.WaitForExit(30*60*1000);
+            if(timeout){if(!proc.HasExited)proc.Kill(true);if(!proc.WaitForExit(10000))throw new IOException("Atualizador não encerrou após o limite.");}
+            if(!Task.WaitAll(new[]{output,errors},TimeSpan.FromSeconds(15)))throw new IOException("Fluxos de log não encerraram após o atualizador.");
+        }
+        var failure=new Regex(@"(?i)(#ERROR:|failed to (download|install|update)|error downloading|workshop.*timed out)",RegexOptions.CultureInvariant,TimeSpan.FromSeconds(2));
+        if(timeout||proc.ExitCode!=0||File.ReadLines(outputPath).Concat(File.ReadLines(errorPath)).Any(line=>failure.IsMatch(line)))throw new IOException("Atualizador informou falha ou excedeu o limite em "+s.Name+".");
     }
 }
