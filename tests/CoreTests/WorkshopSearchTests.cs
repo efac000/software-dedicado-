@@ -9,9 +9,10 @@ static class WorkshopSearchTests{
             Header=request.Headers.Contains("x-webapi-key");KeyInUrl=request.RequestUri!.Query.Contains(new string('A',32),StringComparison.Ordinal);
             using var json=JsonDocument.Parse(Uri.UnescapeDataString(request.RequestUri.Query["?input_json=".Length..]));
             Cursor=json.RootElement.GetProperty("cursor").GetString();Search=json.RootElement.GetProperty("search_text").GetString();
+            if(json.RootElement.TryGetProperty("creator_appid",out _)||json.RootElement.GetProperty("appid").GetInt32()!=322330||!json.RootElement.GetProperty("return_details").GetBoolean()||json.RootElement.GetProperty("ids_only").GetBoolean())throw new Exception("Consulta restringe criador ou nao solicita detalhes");
             if(Error)throw new HttpRequestException("simulated network");
             if(Fail)return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(Empty?"""{"response":{"total":0}}""":"""{"response":{"total":2,"next_cursor":"next","publishedfiledetails":[{"publishedfileid":"42","title":"Example","consumer_appid":322330,"result":1},{"publishedfileid":"99","title":"Other app","consumer_appid":1,"result":1}]}}""")});
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(Empty?"""{"response":{"total":0}}""":"""{"response":{"total":2,"next_cursor":"next","publishedfiledetails":[{"publishedfileid":"42","title":"Example","creator_appid":245850,"consumer_appid":322330,"result":1},{"publishedfileid":"99","title":"Other app","consumer_appid":1,"result":1}]}}""")});
         }
     }
     public static void Run(){
@@ -19,7 +20,7 @@ static class WorkshopSearchTests{
         WorkshopPage Call(string q,string? cursor=null)=>WorkshopSearch.SearchCore(client,key,q,cursor).GetAwaiter().GetResult();
         void Check(bool valid,string message){if(!valid)throw new Exception(message);}
         var page=Call("A & B");
-        Check(page.Items.Length==1&&page.Items[0].Id=="42"&&page.NextCursor=="next"&&handler.Header&&!handler.KeyInUrl&&handler.Cursor=="*"&&handler.Search=="A & B","Consulta não filtrada");
+        Check(page.ReceivedCount==2&&page.Total==2&&page.Items.Length==1&&page.Items[0].Id=="42"&&page.NextCursor=="next"&&handler.Header&&!handler.KeyInUrl&&handler.Cursor=="*"&&handler.Search=="A & B","Consulta não filtrada");
         Check(Call("A & B","next").NextCursor==null&&handler.Cursor=="next","Cursor incorreto");
         using var published=JsonDocument.Parse("""{"response":{"total":2,"publishedfiledetails":[{"publishedfileid":"42","title":"Mod","consumer_appid":322330,"file_type":0,"num_children":1,"children":[{"publishedfileid":"43"}]},{"publishedfileid":"44","title":"Colecao","consumer_appid":322330,"file_type":2,"num_children":1,"children":[{"publishedfileid":"43"}]}]}}""");
         var parsed=WorkshopSearch.Parse(published.RootElement,"*");

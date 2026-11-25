@@ -29,7 +29,7 @@ sealed partial class MainForm{
                 var page=await WorkshopSearch.Search(key.Text,term,advance?cursor:null,lifetime.Token);
                 if(dialog.IsDisposed||lifetime.IsCancellationRequested)return;
                 list.Items.AddRange(page.Items.Cast<object>().ToArray());cursor=page.NextCursor;submitted=term;
-                hint.Text=page.Items.Length==0?"Nenhum resultado encontrado nesta página.":page.Items.Length+" resultados nesta página. Escolha o mod para "+shard+".";
+                hint.Text=page.Items.Length==0?(page.ReceivedCount>0?"A Steam retornou itens sem metadados DST válidos nesta página.":"Nenhum resultado encontrado nesta página."):page.Items.Length+" resultados nesta página. Escolha o mod para "+shard+".";
             }catch(OperationCanceledException){}catch(Exception ex){if(!dialog.IsDisposed&&!lifetime.IsCancellationRequested)hint.Text=ex is IOException or ArgumentException?ex.Message:"Falha na consulta Workshop.";cursor=null;}
             finally{loading=false;if(!dialog.IsDisposed&&!lifetime.IsCancellationRequested){search.Enabled=key.Enabled=query.Enabled=true;next.Enabled=cursor!=null;add.Enabled=list.SelectedItem is WorkshopHit;}}
         }

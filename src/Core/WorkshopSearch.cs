@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 namespace Dedicado;
 public sealed record WorkshopHit(string Id,string Title,string[]? PublishedDependencies=null);
-public sealed record WorkshopPage(WorkshopHit[] Items,string? NextCursor);
+public sealed record WorkshopPage(WorkshopHit[] Items,string? NextCursor,int ReceivedCount=0,int? Total=null);
 public static class WorkshopSearch {
     const string Endpoint="https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/";
     public static async Task<WorkshopPage> Search(string key,string query,string? cursor=null,CancellationToken token=default){
@@ -15,7 +15,7 @@ public static class WorkshopSearch {
         if(key.Length!=32||!key.All(Uri.IsHexDigit))throw new ArgumentException("Informe uma chave de usuário Steam Web API válida.");
         cursor??="*";
         if(cursor.Length>2048||cursor.Any(char.IsControl))throw new ArgumentException("Cursor inválido.");
-        var parameters=JsonSerializer.Serialize(new{query_type=12,cursor,numperpage=30,creator_appid=322330,appid=322330,search_text=query,filetype=0,return_children=true});
+        var parameters=JsonSerializer.Serialize(new{query_type=12,cursor,numperpage=30,appid=322330,search_text=query,filetype=0,ids_only=false,return_details=true,return_children=true});
         using var request=new HttpRequestMessage(HttpMethod.Get,Endpoint+"?input_json="+Uri.EscapeDataString(parameters));
         request.Headers.Add("x-webapi-key",key);
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -42,10 +42,10 @@ public static class WorkshopSearch {
     }
     internal static WorkshopPage Parse(JsonElement root,string cursor){
         if(root.ValueKind!=JsonValueKind.Object||!root.TryGetProperty("response",out var response)||response.ValueKind!=JsonValueKind.Object)throw new IOException("Resposta Workshop incompleta.");
-        var items=new List<WorkshopHit>();var seen=new HashSet<string>(StringComparer.Ordinal);
+        var items=new List<WorkshopHit>();var seen=new HashSet<string>(StringComparer.Ordinal);int received=0;
         if(response.TryGetProperty("publishedfiledetails",out var list)){
             if(list.ValueKind!=JsonValueKind.Array||list.GetArrayLength()>100)throw new IOException("Lista Workshop inválida.");
-            foreach(var item in list.EnumerateArray()){
+            received=list.GetArrayLength();foreach(var item in list.EnumerateArray()){
                 if(item.ValueKind!=JsonValueKind.Object)continue;
                 var id=Scalar(item,"publishedfileid");var title=Scalar(item,"title");var app=Scalar(item,"consumer_appid")??Scalar(item,"consumer_app_id");
                 var result=Scalar(item,"result");
@@ -71,6 +71,6 @@ public static class WorkshopSearch {
         }else if(Scalar(response,"total")!="0")throw new IOException("Resultados Workshop ausentes.");
         var next=Scalar(response,"next_cursor");
         if(string.IsNullOrEmpty(next)||next==cursor||next.Length>2048||next.Any(char.IsControl))next=null;
-        return new(items.ToArray(),next);
+        return new(items.ToArray(),next,received,int.TryParse(Scalar(response,"total"),out var total)&&total>=0?total:null);
     }
 }
