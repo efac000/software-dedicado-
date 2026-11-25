@@ -158,7 +158,7 @@ sealed partial class MainForm:Form{
         if(!smoke){Shown+=(_,_)=>FitWorkingArea();DpiChanged+=(_,_)=>BeginInvoke(new Action(FitWorkingArea));}
         if(!smoke){
             LoadPaths();ShowHome();
-            Shown+=async(_,_)=>{RefreshRecoveryNotice();RefreshClusters();await AutoLocate(true);SelectSavedWorld();RefreshHome();await CheckOnStartup();};
+            Shown+=async(_,_)=>{RefreshRecoveryNotice();RefreshClusters();await AutoLocate(true);SelectSavedWorld();RefreshHome();await CheckOnStartup();OfferFirstRunGuide();};
         }
     }
     static void Style(Button b){b.AccessibleName??=b.Text.Replace("&","");b.AutoSize=true;b.MinimumSize=new Size(0,32);b.FlatStyle=FlatStyle.Flat;b.BackColor=PanelColor;b.ForeColor=Ink;b.FlatAppearance.BorderColor=Border;b.FlatAppearance.MouseOverBackColor=Raised;b.FlatAppearance.MouseDownBackColor=Raised;b.Padding=new Padding(8,0,8,0);if(ButtonIcon(b.Text).Length>0)b.Padding=new Padding(28,0,8,0);DecorateButton(b);}
@@ -449,14 +449,15 @@ sealed partial class MainForm:Form{
                 var all=texts.Values.SelectMany(t=>Lua.Entries(t).Keys).Distinct().ToArray();
                 message.Text="Consultando dados públicos da Workshop...";
                 var updated=new Dictionary<string,string>();
-                var found=await Task.Run(()=>Names(all,plan,lookup,updated));
+                var token=lifetime.Token;var found=await Task.Run(()=>Names(all,plan,lookup,updated,token),token);
                 if(lifetime.IsCancellationRequested||dialog.IsDisposed)return;
                 foreach(var (id,name) in found)names[id]=name;
                 foreach(var id in all)previews.Remove(id);
                 foreach(var (id,url) in updated)previews[id]=url;
                 Populate(Selected());message.Text="Mods listados. Imagens originais aparecem ao selecionar um mod.";
-            }catch(Exception e){if(!dialog.IsDisposed)message.Text="Consulta indisponível: "+e.Message;}
-            finally{loading=false;if(!dialog.IsDisposed)UpdateCatalogActions();}
+            }catch(OperationCanceledException)when(lifetime.IsCancellationRequested){}
+            catch(Exception e){if(!dialog.IsDisposed&&!lifetime.IsCancellationRequested)message.Text="Consulta indisponível: "+e.Message;}
+            finally{loading=false;if(!dialog.IsDisposed&&!lifetime.IsCancellationRequested)UpdateCatalogActions();}
         }
         async Task ShowPreview(){
             var generation=++previewGeneration;activePreview?.Cancel();activePreview?.Dispose();activePreview=null;ClearImage();var id=Selected();title.Text=id==null?"Selecione um mod":names.GetValueOrDefault(id,id)+"\nWorkshop "+id;
@@ -505,7 +506,7 @@ sealed partial class MainForm:Form{
             if(!candidate.Values.Any(b=>Lua.Active(utf8.GetString(b).TrimStart('\uFEFF')).Count>0)&&Notice.Show(this,"Todos os mods ficarão desativados. Entidades dependentes de mods podem desaparecer ao iniciar o mundo. Prosseguir apenas para revisão?","Lista vazia",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
             result=candidate;FinishTaskPage(true);}catch(Exception e){message.Text=e.Message;}};
         chart.Paint+=(_,e)=>{if(chart.Tag is ValueTuple<int,int> counts&&counts.Item2>0){int width=(int)((long)chart.Width*counts.Item1/counts.Item2);using var fill=new SolidBrush(Accent);if(width>0)e.Graphics.FillRectangle(fill,0,0,width,chart.Height);}};
-        cancel.Click+=(_,_)=>{if(loading){message.Text="A consulta está em andamento.";return;}FinishTaskPage(false);};
+        cancel.Click+=(_,_)=>{lifetime.Cancel();FinishTaskPage(false);};
         Populate();UpdateCatalogActions();
         var pending=ShowTaskPage("mods",dialog,840,590,cancel);
         _=Lookup();
@@ -529,19 +530,20 @@ sealed partial class MainForm:Form{
         actions.Controls.Add(cancel);actions.Controls.Add(ok);dialog.Controls.Add(tabs);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.CancelButton=cancel;
         PrepareAccessibility(dialog);return dialog.ShowDialog(this)==DialogResult.OK?result:null;
     }
-    static async Task<Dictionary<string,string>> Names(string[] ids,Plan plan,bool online,Dictionary<string,string>? previews=null){
+    static async Task<Dictionary<string,string>> Names(string[] ids,Plan plan,bool online,Dictionary<string,string>? previews=null,CancellationToken cancellation=default){
         var result=new Dictionary<string,string>();
         foreach(var id in ids){
+            cancellation.ThrowIfCancellationRequested();
             var paths=plan.Target.Shards.SelectMany(shard=>Engine.ModInfoPaths(plan,shard,id)).Distinct();
             foreach(var p in paths)try{if(File.Exists(p)&&new FileInfo(p).Length<1_000_000){Engine.SafePath(p);var m=Regex.Match(File.ReadAllText(p),"""(?m)^\s*name\s*=\s*["']([^"'\r\n]+)["']""");if(m.Success){result[id]=m.Groups[1].Value+" (local)";break;}}}catch{}
         }
         if(online)try{
             using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(12)};
-            using var limit=new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            using var limit=CancellationTokenSource.CreateLinkedTokenSource(cancellation);limit.CancelAfter(TimeSpan.FromSeconds(25));
             foreach(var chunk in ids.Chunk(50)){
                 var data=new Dictionary<string,string>{{"itemcount",chunk.Length.ToString()}};for(int i=0;i<chunk.Length;i++)data["publishedfileids["+i+"]"]=chunk[i];
                 using var response=await http.PostAsync("https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/",new FormUrlEncodedContent(data),limit.Token);response.EnsureSuccessStatusCode();
-                using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(limit.Token));
                 foreach(var item in json.RootElement.GetProperty("response").GetProperty("publishedfiledetails").EnumerateArray()){
                     var id=item.GetProperty("publishedfileid").GetString();if(id==null||!chunk.Contains(id))continue;
                     if(item.TryGetProperty("result",out var r)&&r.GetInt32()==1&&item.TryGetProperty("title",out var title)&&item.TryGetProperty("consumer_app_id",out var app)&&app.GetInt32()==322330){
@@ -551,8 +553,8 @@ sealed partial class MainForm:Form{
                     else result[id]="Workshop indisponível / privada";
                 }
             }
-        }catch{}
-        foreach(var id in ids)result.TryAdd(id,"Nome não identificado");return result;
+        }catch(OperationCanceledException)when(cancellation.IsCancellationRequested){throw;}catch{}
+        cancellation.ThrowIfCancellationRequested();foreach(var id in ids)result.TryAdd(id,"Nome não identificado");return result;
     }
     async Task Reset(){
         var p=current;if(p==null||!exclusive.Checked)return;

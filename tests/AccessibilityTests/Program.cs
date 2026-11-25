@@ -8,6 +8,7 @@ static class AccessibilityTests{
     static T Field<T>(Form form,string name)=>(T)FormType.GetField(name,Instance)!.GetValue(form)!;
     static object? Call(Form form,string name,params object?[] args)=>FormType.GetMethod(name,Instance)!.Invoke(form,args);
     static void Assert(bool pass,string message){if(!pass)throw new Exception(message);}
+    static void WaitFor(Func<bool> done,string message){var clock=System.Diagnostics.Stopwatch.StartNew();while(!done()&&clock.ElapsedMilliseconds<5000){Application.DoEvents();System.Threading.Thread.Sleep(5);}Assert(done(),message);}
     static IEnumerable<Control> Desc(Control c)=>c.Controls.Cast<Control>().SelectMany(x=>new[]{x}.Concat(Desc(x)));
     static Form Create(string theme){
         FormType.GetMethod("ConfigurePalette",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[theme]);
@@ -97,10 +98,36 @@ static class AccessibilityTests{
                         var pending=(Task<bool>)Call(form,"ShowTaskPage","mods",content,480,420,cancel)!;Application.DoEvents();
                         Assert(Field<Panel>(form,"taskPageHost").Visible&&!mainHost.Visible,"Task page not embedded");
                         cancel.PerformClick();
-                        for(int i=0;i<100&&!pending.IsCompleted;i++){Application.DoEvents();System.Threading.Thread.Sleep(5);}
+                        WaitFor(()=>pending.IsCompleted,"Task page did not finish");
                         Assert(pending.IsCompletedSuccessfully&&!pending.Result&&mainHost.Visible,"Task page cancellation did not restore workspace");
                     }
                     Call(form,"Busy",false);Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_TASK_CANCEL_PASS "+theme);
+                    Call(form,"OpenTask",2,false,null,false,"mods");
+                    var cluster=Engine.LoadClusterDirectory(world);
+                    var plan=new Plan(cluster,cluster,install,"",cluster.Shards.Select(sh=>new ShardPlan(sh,System.Text.Encoding.UTF8.GetBytes("return {}"),[],[])).ToArray(),"fixture",true,true);
+                    Call(form,"Busy",true);
+                    var editing=(Task<Dictionary<string,byte[]>?>)Call(form,"EditVisual",plan,false)!;
+                    WaitFor(()=>Field<Panel>(form,"taskPageHost")!=null,"Catalog did not open");
+                    var catalog=Field<Panel>(form,"taskPageHost");
+                    var shardSelector=Desc(catalog).OfType<ComboBox>().Single(c=>c.AccessibleName=="Shard selecionado");
+                    shardSelector.SelectedItem="Caves";
+                    var idField=Desc(catalog).OfType<TextBox>().Single(c=>c.AccessibleName=="Adicionar por ID ou link Workshop");
+                    var add=Desc(catalog).OfType<Button>().Single(c=>c.Text=="Adicionar / ativar");
+                    WaitFor(()=>add.Enabled,"Offline catalog lookup did not finish");idField.Text="123456789";add.PerformClick();
+                    var review=Desc(catalog).OfType<Button>().Single(c=>c.Text=="Revisar plano");
+                    WaitFor(()=>review.Enabled,"Offline catalog add did not finish");review.PerformClick();
+                    WaitFor(()=>editing.IsCompleted,"Catalog review did not finish");
+                    Assert(editing.IsCompletedSuccessfully&&editing.Result!=null,"Catalog result missing");
+                    Assert(Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result!["Caves"])).ContainsKey("123456789")&&Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result["Master"])).Count==0,"Catalog changed wrong shard");
+                    Call(form,"Busy",false);
+                    var diag=(Task)Call(form,"Diagnose")!;
+                    WaitFor(()=>Field<Panel>(form,"taskPageHost")!=null,"Diagnostic did not open");
+                    var diagnosticPage=Field<Panel>(form,"taskPageHost");
+                    Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing");
+                    Desc(diagnosticPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar do diagnóstico").PerformClick();
+                    WaitFor(()=>diag.IsCompleted,"Diagnostic did not return");
+                    Assert(diag.IsCompletedSuccessfully&&mainHost.Visible,"Diagnostic did not restore workspace");
+                    Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("CATALOG_SHARD_AND_DIAGNOSTIC_PASS "+theme);
                 }
                 var state=Field<Label>(form,"homeState");
                 Assert(state.AccessibilityObject.Name?.Contains("QA Accessibility")==true,"Status accessible name not updated");

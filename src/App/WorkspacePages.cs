@@ -97,6 +97,11 @@ sealed partial class MainForm{
         page.Controls.Add(theme,0,2);page.Controls.Add(auto,0,3);page.Controls.Add(save,0,4);page.Controls.Add(forget,0,5);page.Controls.Add(message,0,6);page.Controls.Add(actions,0,7);
         ShowInternalPage("preferences",page);
     }
+    static string GuidePreference=>Path.Combine(Path.GetDirectoryName(PreferencesPath)!,"guide-seen.txt");
+    void OfferFirstRunGuide(){
+        if(smokeMode||busy||homeHost?.Visible!=true||File.Exists(GuidePreference)||target.SelectedItem!=null)return;
+        ShowGettingStarted();
+    }
     void ShowGettingStarted(){
         if(busy)return;
         var page=NewPage("Primeiros passos","Siga a ordem indicada. Nenhuma alteração no mundo sem autorização.",7);
@@ -112,6 +117,7 @@ sealed partial class MainForm{
         Step(5,"4. Consultar backups","Confira as opções de recuperação.",()=>OpenTask(2,false,()=>OpenBackups(),section:"backups"));
         var back=new Button{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();page.Controls.Add(back,0,6);
         ShowInternalPage("guide",page);
+        if(!smokeMode)try{Directory.CreateDirectory(Path.GetDirectoryName(GuidePreference)!);File.WriteAllText(GuidePreference,"1");}catch{}
     }
     void ShowSessionLog(){
         if(busy)return;
