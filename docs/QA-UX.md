@@ -29,4 +29,13 @@ O resultado comprova os cenários testados, não ausência absoluta de defeitos 
 
 ## Revisão de navegação 0e72320
 
-PR #29 integrado; testes locais de navegação em Diagnóstico e Backups nos dois temas aprovados. O catálogo permanece bloqueado durante edição. CI e release [45704640329](https://github.com/efac000/software-dedicado-/actions/runs/45704640329) aprovados, incluindo conferência de hashes antes da publicação e execução ARM64 nativa. O site recomenda a build 1.0.0-build-45704640329-1; ela continua marcada como pré-release no GitHub por não haver homologação em outras escalas físicas de DPI. A versão estável anterior permanece acessível.
+PR #29 integrado; testes locais de navegação em Diagnóstico e Backups nos dois temas aprovados. O catálogo permanece bloqueado durante edição. CI e release [45704640329](https://github.com/efac000/software-dedicado-/actions/runs/45704640329) aprovados, incluindo conferência de hashes antes da publicação e execução ARM64 nativa. O site passou a distribuir a build 1.0.0-build-45704640329-1, promovida a estável após os testes complementares abaixo. A versão estável anterior permanece acessível.
+
+## Homologação final e promoção (25/11/2026)
+
+- Código da release: `0e72320b9ca7f9d8ead5c090e482d5f6f2051b9a`. Alterações posteriores são de documentação/implantação, não alteram os executáveis.
+- Windows local: escala original 100%; 125% e 150% aplicados pela interface de Configurações, confirmados por DeviceDpi 120 e 144. Dez cenários de viewport (cinco por tema) em cada escala, incluindo perímetro dos botões, teclado, navegação, preferências, cancelamento e páginas de diagnóstico e backups. Ambos retornaram ACCESSIBILITY_QA_PASS e código 0. Escala restaurada a 100%.
+- Os três executáveis públicos foram baixados e comparados com SHA-256.txt e os hashes publicados no GitHub. Autotestes e testes de janela dos arquivos públicos x64 e x86 retornaram 0. ARM64 nativo aprovado no workflow de release.
+- [Release estável 1.0.0-build-45704640329-1](https://github.com/efac000/software-dedicado-/releases/tag/1.0.0-build-45704640329-1) promovida sem recompilar nem substituir os binários.
+- [CI do PR](https://github.com/efac000/software-dedicado-/actions/runs/45704079064), [CI da revisão](https://github.com/efac000/software-dedicado-/actions/runs/45705851101), [release](https://github.com/efac000/software-dedicado-/actions/runs/45704640329) e [implantação pública anterior](https://github.com/efac000/software-dedicado-/actions/runs/45705851112) aprovados. O CI redundante 45704640412 ficou preso e recebeu solicitação de cancelamento; a automação temporária 45704826063 expirou aguardando esse CI, substituída pela publicação direta confirmada. As falhas históricas são preservadas no histórico.
+- Limites: 175% e 200% somente simulados; Narrador/NVDA não exigidos; executáveis sem Authenticode. Não se garante ausência absoluta de defeitos.
