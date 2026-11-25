@@ -44,3 +44,8 @@ Validação de uma instalação DST real ainda necessária.
 - Filtros de gravidade e busca no diagnóstico; atalhos para análise de reinstalação e catálogo visual.
 - Bloqueios de segurança e seleção por caminho exato; sem reparo automático de portas, tokens ou saves.
 - Comparação inconclusiva quando Lua não pode ser lido, estimativa de espaço para backup e exportação sem sobrescrita.
+
+## Revisão de recuperação — 1.0.0
+- Central de backups e recuperação verificada das configurações de mods sem reverter saves.
+- Manifesto SHA-256 com vínculo ao cluster e à instalação; proteção contra backup divergente.
+- Desativação integral explícita, confirmação reforçada e dispensa de downloads quando não há mods ativos.

@@ -122,6 +122,30 @@ try{
     Check(File.ReadAllBytes(overridePath).SequenceEqual(changed),"Edição não aplicada");
     Check(File.ReadAllText(setupFile).Contains("ServerModSetup(\"43\")"),"Setup não acompanhou edição");
     Check(File.ReadAllText(Path.Combine(save,"world"))=="save-intacto","Reparo/edição alterou save");
+    // Recover settings through the same verified transaction, not old saves.
+    var recovery=Recovery.Prepare(completed,t,install);
+    Check(recovery.Ids.SequenceEqual(new[]{"99"})&&recovery.Edited,"Plano de recuperação incorreto");
+    Reject(()=>Recovery.Prepare(completed,s,install));
+    var oldBackupFile=Path.Combine(completed,"cluster","Master","modoverrides.lua");
+    var oldBackupBytes=File.ReadAllBytes(oldBackupFile);
+    File.AppendAllText(oldBackupFile,"\n-- adulterado");
+    Reject(()=>Recovery.Prepare(completed,t,install));
+    File.WriteAllBytes(oldBackupFile,oldBackupBytes);
+    Check(Recovery.List(backups).Contains(completed),"Backup não listado");
+    File.WriteAllText(Path.Combine(save,"world"),"save-mais-recente");
+    Engine.Run(Recovery.Prepare(completed,t,install),_=>{},backups,()=>{},Download);
+    Check(File.ReadAllText(overridePath).Contains("99"),"Recuperação não aplicada");
+    Check(File.ReadAllText(Path.Combine(save,"world"))=="save-mais-recente","Recuperação reverteu save");
+    var emptyEdits=new Dictionary<string,byte[]>{{"Master",System.Text.Encoding.UTF8.GetBytes(Lua.SetEnabled(File.ReadAllText(overridePath),"99",false))}};
+    var removeAll=Engine.AnalyzeRepair(t,install,emptyEdits,Engine.AnalyzeEditBaseline(t,install).Fingerprint);
+    Check(removeAll.Ids.Length==0,"Lista vazia não suportada");
+    var downloads=0;
+    Engine.Run(removeAll,_=>{},backups,()=>{},(_,_,_,_,_)=>downloads++);
+    Check(downloads==0&&Lua.Active(File.ReadAllText(overridePath)).Count==0&&Engine.SetupIds(File.ReadAllBytes(setupFile)).Count==0,"Desativação integral falhou");
+    Check(File.ReadAllText(Path.Combine(save,"world"))=="save-mais-recente","Desativação alterou save");
+    // Restore the known setup for subsequent diagnostic tests.
+    var reenable=Engine.AnalyzeRepair(t,install,new Dictionary<string,byte[]>{{"Master",changed}},Engine.AnalyzeEditBaseline(t,install).Fingerprint);
+    Engine.Run(reenable,_=>{},backups,()=>{},Download);
     // Diagnostic must report discrepancies without touching saves, overrides or exposing tokens/log lines.
     var diagDir=Path.Combine(root,"diagnostic","Cluster_9");
     Directory.CreateDirectory(Path.Combine(diagDir,"Master"));Directory.CreateDirectory(Path.Combine(diagDir,"Caves"));

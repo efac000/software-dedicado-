@@ -19,7 +19,7 @@ sealed class MainForm:Form{
     readonly CheckBox exclusive=new(){Text="Confirmo: instalação exclusiva, UGC padrão, servidor e reinício automático desligados.",AutoSize=true};
     readonly CheckBox online=new(){Text="Consultar nomes na Steam Workshop (envia somente IDs públicos).",Checked=true,AutoSize=true};
     readonly Button diagnose=new(){Text="Diagnóstico do dedicado"};
-    readonly Button scan=new(){Text="Localizar clusters"},analyze=new(){Text="Analisar (sem alterações)"},reset=new(){Text="Confirmar e reinstalar",Enabled=false},backups=new(){Text="Abrir backups"},website=new(){Text="Site / atualizações"};
+    readonly Button scan=new(){Text="Localizar clusters"},analyze=new(){Text="Analisar (sem alterações)"},reset=new(){Text="Confirmar e reinstalar",Enabled=false},backups=new(){Text="Central de backups"},website=new(){Text="Site / atualizações"};
     readonly Label status=new(){Text="Selecione as pastas e os mundos.",AutoSize=false,Dock=DockStyle.Fill,ForeColor=Muted,AutoEllipsis=true};
     readonly ComboBox mode=new(){DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill};
     Control? sourceRow;
@@ -51,7 +51,7 @@ sealed class MainForm:Form{
         destinationRoot.Text=root.Text;
         install.Text=FindInstall();
         root.TextChanged+=(_,_)=>{InvalidatePlan();source.Items.Clear();};destinationRoot.TextChanged+=(_,_)=>{InvalidatePlan();target.Items.Clear();};install.TextChanged+=(_,_)=>InvalidatePlan();source.SelectedIndexChanged+=(_,_)=>InvalidatePlan();target.SelectedIndexChanged+=(_,_)=>InvalidatePlan();exclusive.CheckedChanged+=(_,_)=>reset.Enabled=!busy&&current!=null&&exclusive.Checked;online.CheckedChanged+=(_,_)=>InvalidatePlan();
-        scan.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(install.Text))install.Text=FindInstall();RefreshClusters();};analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();diagnose.Click+=async(_,_)=>await Diagnose();backups.Click+=(_,_)=>OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
+        scan.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(install.Text))install.Text=FindInstall();RefreshClusters();};analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();diagnose.Click+=async(_,_)=>await Diagnose();backups.Click+=async(_,_)=>await OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
         FormClosing+=(_,e)=>{if(busy){e.Cancel=true;MessageBox.Show("A operação está em andamento. Aguarde a conclusão.");}};
         mode.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();RefreshMode();RefreshClusters();};
         RefreshMode();Shown+=(_,_)=>RefreshClusters();
@@ -95,7 +95,7 @@ sealed class MainForm:Form{
         busy=b;root.Enabled=destinationRoot.Enabled=install.Enabled=source.Enabled=target.Enabled=scan.Enabled=analyze.Enabled=exclusive.Enabled=online.Enabled=!b;
         // Disable path-picker buttons as well.
         foreach(Control row in Controls[0].Controls)if(row is TableLayoutPanel)row.Enabled=!b;
-        diagnose.Enabled=!b;RefreshMode();reset.Enabled=!b&&current!=null&&exclusive.Checked;
+        diagnose.Enabled=backups.Enabled=!b;RefreshMode();reset.Enabled=!b&&current!=null&&exclusive.Checked;
     }
     async Task Diagnose(){
         var cluster=target.SelectedItem is Cluster c?c.Path:destinationRoot.Text;
@@ -185,6 +185,10 @@ sealed class MainForm:Form{
                 var baseline=plan.Fingerprint;var dest=plan.Target;
                 plan=await Task.Run(()=>Engine.AnalyzeRepair(Engine.Load(Path.GetDirectoryName(dest.Path)!,dest.Number),installation,edits,baseline));
             }
+            await ShowPlan(plan,lookup);
+        }catch(Exception e){Write("Análise bloqueada: "+e.Message);status.Text="Análise falhou.";}finally{Busy(false);}
+    }
+    async Task ShowPlan(Plan plan,bool lookup){
             var ids=plan.Shards.SelectMany(s=>s.Wanted.Concat(s.Old)).Distinct().ToArray();
             status.Text="Consultando nomes dos mods...";
             var names=await Names(ids,plan,lookup);
@@ -197,7 +201,6 @@ sealed class MainForm:Form{
             Write("Origem: "+plan.Source.Path+" — "+plan.Source.Name);Write("Destino: "+plan.Target.Path+" — "+plan.Target.Name);Write("Instalação: "+plan.Install);
             Write("Simulação concluída. Nenhum arquivo alterado. Revise a lista e confirme instalação exclusiva.");
             if(names.Values.Any(n=>n=="Nome não identificado"))Write("Alguns nomes não puderam ser consultados. Confira os IDs na Workshop.");
-        }catch(Exception e){Write("Análise bloqueada: "+e.Message);status.Text="Análise falhou.";}finally{Busy(false);}
     }
     Dictionary<string,byte[]>? EditVisual(Plan plan,bool lookup){
         using var dialog=new Form{Text="Catálogo de mods — "+plan.Target.Name,Size=new Size(1000,650),MinimumSize=new Size(760,520),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
@@ -269,7 +272,7 @@ sealed class MainForm:Form{
         open.Click+=(_,_)=>{var id=Selected();Open(id==null?"https://steamcommunity.com/app/322330/workshop/":"https://steamcommunity.com/sharedfiles/filedetails/?id="+id);};
         Dictionary<string,byte[]>? result=null;
         ok.Click+=(_,_)=>{try{var candidate=new Dictionary<string,byte[]>();foreach(var sh in plan.Shards){var text=texts[sh.Name];Lua.Active(text);candidate[sh.Name]=text==utf8.GetString(sh.Content).TrimStart('\uFEFF')?sh.Content:utf8.GetBytes(text);}
-            if(!candidate.Values.Any(b=>Lua.Active(utf8.GetString(b).TrimStart('\uFEFF')).Count>0)){message.Text="Mantenha ao menos um mod ativo; remoção integral não suportada.";return;}
+            if(!candidate.Values.Any(b=>Lua.Active(utf8.GetString(b).TrimStart('\uFEFF')).Count>0)&&MessageBox.Show(dialog,"Todos os mods ficarão desativados. Entidades dependentes de mods podem desaparecer ao iniciar o mundo. Prosseguir apenas para revisão?","Lista vazia",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
             result=candidate;dialog.DialogResult=DialogResult.OK;}catch(Exception e){message.Text=e.Message;}};
         dialog.FormClosing+=(_,e)=>{if(loading){e.Cancel=true;message.Text="A consulta está em andamento.";}else{lifetime.Cancel();activePreview?.Cancel();activePreview?.Dispose();activePreview=null;++previewGeneration;ClearImage();}};
         Populate();dialog.Shown+=async(_,_)=>await Lookup();
@@ -322,15 +325,42 @@ sealed class MainForm:Form{
         var p=current;if(p==null||!exclusive.Checked)return;
         if(MessageBox.Show((p.InPlace?(p.Edited?"Modo: edição e reinstalação\n":"Modo: reinstalação sem alterar opções\n"):"Modo: copiar outro mundo\n")+"Origem: "+p.Source.Name+" (Cluster_"+p.Source.Number+")\n"+p.Source.Path+"\n\n"+p.Ids.Length+" mods únicos. A lista na tela corresponde ao plano.\nConfirma esta configuração?","Confirmação 1 de 2",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
         if(grid.Rows.Cast<DataGridViewRow>().Any(r=>Convert.ToString(r.Cells[0].Value) is ("Workshop indisponível / privada" or "Nome não identificado")&&Convert.ToString(r.Cells[3].Value)!="Remover da configuração")){Write("Mod indisponível ou sem nome identificado na origem: reset bloqueado. Ative a consulta Workshop e analise novamente.");return;}
-        using var dialog=new Form{Text="Confirmação 2 de 2",Size=new Size(620,300),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Bg,ForeColor=Ink,Font=new Font("Segoe UI",10)};
+        using var dialog=new Form{Text="Confirmação 2 de 2",Size=new Size(650,350),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=Bg,ForeColor=Ink,Font=new Font("Segoe UI",10)};
         var layout=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(15)};
-        var phrase="RESET Cluster_"+p.Target.Number;
-        var label=new Label{Text="Destino: "+p.Target.Name+"\n"+p.Target.Path+"\n\nSomente caches V1 dos IDs afetados e UGC do destino serão movidos.\nMods removidos podem afetar entidades ao iniciar o mundo.\nDigite exatamente: "+phrase,AutoSize=true,MaximumSize=new Size(570,0)};
+        var phrase=(p.Ids.Length==0?"DESATIVAR TODOS Cluster_":"RESET Cluster_")+p.Target.Number;
+        var label=new Label{Text=(p.Ids.Length==0?"ATENÇÃO: TODOS OS MODS SERÃO DESATIVADOS.\n":"")+"Destino: "+p.Target.Name+"\n"+p.Target.Path+"\n\nSomente caches V1 dos IDs afetados e UGC do destino serão movidos.\nMods removidos podem afetar entidades ao iniciar o mundo.\nDigite exatamente: "+phrase,AutoSize=true,MaximumSize=new Size(570,0)};
         var input=new TextBox{Width=450,BackColor=PanelColor,ForeColor=Ink,BorderStyle=BorderStyle.FixedSingle};var confirm=new Button{Text="Executar",Enabled=false,DialogResult=DialogResult.OK};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};input.TextChanged+=(_,_)=>confirm.Enabled=input.Text==phrase;
         Style(confirm);Style(cancel);layout.Controls.Add(label);layout.Controls.Add(input);layout.Controls.Add(confirm);layout.Controls.Add(cancel);dialog.Controls.Add(layout);dialog.CancelButton=cancel;dialog.AcceptButton=confirm;
         if(dialog.ShowDialog(this)!=DialogResult.OK||input.Text!=phrase)return;
         Busy(true);try{status.Text="Manutenção em andamento";var result=await Task.Run(()=>Engine.Apply(p,Write));Write("Atualizadores concluídos. Backup: "+result);Write("Confira os logs e teste a entrada no mundo e nas cavernas. Não reiniciamos o servidor.");status.Text="Manutenção concluída; validação do mundo pendente.";}catch(Exception e){Write(e.Message);status.Text="Falha: leia o relatório antes de iniciar o mundo.";}finally{current=null;Busy(false);}
     }
     static void Open(string url){try{Process.Start(new ProcessStartInfo(url){UseShellExecute=true});}catch(Exception e){MessageBox.Show(e.Message);}}
-    static void OpenBackups(){var p=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Gerenciador de Dedicado","Backups");Directory.CreateDirectory(p);Open(p);}
+    async Task OpenBackups(){
+        if(busy)return;
+        var rootPath=Recovery.DefaultRoot;Directory.CreateDirectory(rootPath);
+        using var dialog=new Form{Text="Central de backups — configurações de mods",Size=new Size(850,480),MinimumSize=new Size(620,360),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
+        var hint=new Label{Dock=DockStyle.Top,Height=82,ForeColor=Muted,Text="Recupere configurações de mods de backups com manifesto de integridade. Selecione primeiro o mesmo cluster e instalação na janela principal. Saves, tokens e server.ini atuais NÃO serão restaurados. Backups antigos podem ser abertos na pasta."};
+        var list=new ListBox{Dock=DockStyle.Fill,BackColor=PanelColor,ForeColor=Ink,HorizontalScrollbar=true};
+        try{list.Items.AddRange(Recovery.List(rootPath).Cast<object>().ToArray());}catch(Exception e){Write("Backups: "+e.Message);return;}
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};
+        var close=new Button{Text="Fechar",DialogResult=DialogResult.Cancel};var folder=new Button{Text="Abrir pasta"};var prepare=new Button{Text="Preparar recuperação",Enabled=false};
+        foreach(var button in new[]{close,folder,prepare})Style(button);
+        list.SelectedIndexChanged+=(_,_)=>prepare.Enabled=list.SelectedItem is string&&target.SelectedItem is Cluster;
+        folder.Click+=(_,_)=>Open(rootPath);
+        prepare.Click+=(_,_)=>dialog.DialogResult=DialogResult.OK;
+        actions.Controls.Add(close);actions.Controls.Add(prepare);actions.Controls.Add(folder);
+        dialog.Controls.Add(list);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.CancelButton=close;
+        if(dialog.ShowDialog(this)!=DialogResult.OK||list.SelectedItem is not string backup||target.SelectedItem is not Cluster chosen)return;
+        var installation=install.Text;var lookup=online.Checked;
+        mode.SelectedIndex=1;destinationRoot.Text=chosen.Path;RefreshClusters();
+        var index=target.Items.Cast<Cluster>().ToList().FindIndex(x=>x.Path.Equals(chosen.Path,StringComparison.OrdinalIgnoreCase));
+        if(index<0){Write("Cluster original não encontrado.");return;}
+        target.SelectedIndex=index;InvalidatePlan();exclusive.Checked=false;Busy(true);
+        try{
+            status.Text="Conferindo backup e destino...";
+            var plan=await Task.Run(()=>{var fresh=Engine.Load(Path.GetDirectoryName(chosen.Path)!,chosen.Number);return Recovery.Prepare(backup,fresh,installation);});
+            Write("Recuperação preparada a partir de "+Path.GetFileName(backup)+". Apenas configurações de mods; nenhuma gravação efetuada.");
+            await ShowPlan(plan,lookup);
+        }catch(Exception e){InvalidatePlan();Write("Recuperação bloqueada: "+e.Message);}finally{Busy(false);}
+    }
 }
