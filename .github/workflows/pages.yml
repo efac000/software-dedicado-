@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 concurrency:
@@ -17,11 +18,35 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      PAGES_ARTIFACT: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
+        id: upload
         with:
+          name: ${{ env.PAGES_ARTIFACT }}
           path: docs
+      - name: Confirm artifact is visible before deployment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_ID: ${{ steps.upload.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            if result=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$PAGES_ARTIFACT" 2>/dev/null); then
+              if jq -e --arg name "$PAGES_ARTIFACT" --arg id "$EXPECTED_ID" '[.artifacts[] | select(.name == $name and (.id|tostring)==$id and .expired==false)] | length == 1' <<< "$result" >/dev/null; then
+                echo "Verified artifact $PAGES_ARTIFACT"
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo "::error::Uploaded Pages artifact not visible within the retry window."
+          exit 1
       - uses: actions/deploy-pages@v4
         id: deployment
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT }}
