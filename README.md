@@ -71,3 +71,8 @@ Ao abrir, o aplicativo identifica a arquitetura do Windows e do próprio process
 
 ## Revisão da interface
 A janela indica quando existe recuperação pendente e bloqueia a aplicação de novos planos até sua revisão. Os controles têm descrições de acessibilidade e dicas de uso; a confirmação de exclusividade é descartada ao invalidar o plano. O catálogo desabilita ações que exigem uma seleção quando nenhum mod está selecionado. A opção de pesquisa global informa explicitamente a exigência de chave Steam; a busca no navegador continua disponível. A verificação de interface inclui limites dos controles em dois tamanhos, modos com e sem origem, e bloqueio da aplicação sem plano.
+
+## Tela inicial simplificada
+A tela inicial apresenta quatro tarefas: gerenciar mods, atualizar o dedicado, diagnosticar e consultar backups. Detectar e escolher permite selecionar instalações e mundos sem escrever neles. O modo simples apresenta o caminho e a análise; Ferramentas avançadas mantém cópia entre mundos, reinstalação e editor Lua. Voltar ao Início descarta o plano e a confirmação de exclusividade, mas não os caminhos escolhidos.
+
+Em Preferências, é possível salvar ou esquecer os caminhos locais (sem salvar credenciais), escolher tema claro/escuro/automático e optar pela verificação de builds ao abrir. O tema entra em vigor ao reabrir o aplicativo. A verificação consulta a release estável do GitHub e nunca instala nada automaticamente. O Registro mostra apenas as operações da sessão atual. Os atalhos de teclado Alt + letra e Tab permitem navegar pela interface; o Windows pode ativar alto contraste. Ainda não foi realizada homologação formal com leitores de tela ou monitores de diferentes DPI.
