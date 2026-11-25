@@ -39,3 +39,8 @@ Validação de uma instalação DST real ainda necessária.
 - Painel somente leitura com gravidade, localização, problema e recomendação.
 - Inspeção de configuração, caches, setup, processos, disco e sinais em logs; relatório TXT sem linhas brutas.
 - Correção da detecção convencional C:\steamcmd e regressões de diagnóstico.
+
+## Revisão de operações assistidas — 1.0.0
+- Filtros de gravidade e busca no diagnóstico; atalhos para análise de reinstalação e catálogo visual.
+- Bloqueios de segurança e seleção por caminho exato; sem reparo automático de portas, tokens ou saves.
+- Comparação inconclusiva quando Lua não pode ser lido, estimativa de espaço para backup e exportação sem sobrescrita.

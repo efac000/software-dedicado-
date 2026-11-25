@@ -3,7 +3,16 @@ using System.Text.RegularExpressions;
 namespace Dedicado;
 public enum Severity { Error, Warning, Info }
 public record Finding(Severity Level,string Code,string Scope,string Problem,string Advice);
+public enum DiagnosticAction { None, RepairMods, ManageMods }
 public static class Diagnostics {
+    public static DiagnosticAction ActionFor(Finding finding)=>finding.Code switch {
+        "MOD_CACHE" or "SETUP_MISSING" or "LOG_WORKSHOP" => DiagnosticAction.RepairMods,
+        "OVERRIDES_MISSING" or "LOG_LUA" => DiagnosticAction.ManageMods,
+        _=>DiagnosticAction.None
+    };
+    // A shortcut can only prepare a plan, not perform the maintenance.
+    public static bool CanPrepare(IEnumerable<Finding> findings)=>!findings.Any(f=>f.Level==Severity.Error||f.Code is "SETUP_EXTRA" or "FORCED_MODS" or "SHARED_UGC" or "RUNNING" or "LOW_DISK" or "CUSTOM_CLUSTER");
+
     static readonly UTF8Encoding Utf8=new(false,true);
     static readonly (string Code,Regex Pattern,string Problem,string Advice)[] Patterns=[
         ("LOG_WORKSHOP",R(@"failed to (download|install|update)|error downloading|workshop.{0,100}(failed|timed out|timeout)|mod download.{0,50}(failed|error)"),"Registro de falha de download/atualização.","Confira a disponibilidade na Workshop, a conexão e use reinstalação após desligar o servidor."),
@@ -79,6 +88,7 @@ public static class Diagnostics {
         if(!shards.Contains("Master"))Add(Severity.Error,"MASTER_MISSING","Cluster","Pasta Master ausente.","Confira o diretório correto ou restaure a estrutura do servidor.");
         if(config.TryGetValue("SHARD.shard_enabled",out var enabled)&&enabled.Equals("true",StringComparison.OrdinalIgnoreCase)&&!shards.Contains("Caves"))Add(Severity.Warning,"CAVES_MISSING","Cluster","Shards habilitados, mas Caves não localizado.","Confira a topologia; outros shards personalizados não são inspecionados.");
         var ids=new HashSet<string>(StringComparer.Ordinal);var ports=new Dictionary<int,string>();
+        bool completeMods=true;
         foreach(var shard in shards){
             progress?.Invoke("Inspecionando "+shard+"...");
             var dir=Path.Combine(clusterPath,shard);
@@ -99,7 +109,8 @@ public static class Diagnostics {
             Probe(shard+"/modoverrides.lua",()=>{
                 var file=Path.Combine(dir,"modoverrides.lua");
                 if(!File.Exists(file)){Add(Severity.Info,"OVERRIDES_MISSING",shard,"modoverrides.lua ausente; nenhum mod declarado neste arquivo.","Use o gerenciador visual se desejar adicionar mods.");return;}
-                var active=Lua.Active(Utf8.GetString(Read(file)).TrimStart('\uFEFF'));
+                Dictionary<string,bool> active;
+                try{active=Lua.Active(Utf8.GetString(Read(file)).TrimStart('\uFEFF'));}catch{completeMods=false;throw;}
                 foreach(var id in active.Keys){
                     ids.Add(id);if(!installOk)continue;
                     var ugc=Path.Combine(install,"ugc_mods",clusterName,shard);
@@ -116,7 +127,8 @@ public static class Diagnostics {
             var file=Path.Combine(install,"mods","dedicated_server_mods_setup.lua");
             var registered=Engine.SetupIds(File.Exists(file)?Read(file):null);
             foreach(var id in ids.Except(registered))Add(Severity.Warning,"SETUP_MISSING","Setup global","Mod ativo "+id+" não registrado no setup global.","Reinstale os mods pelo aplicativo em instalação exclusiva.");
-            foreach(var id in registered.Except(ids))Add(Severity.Warning,"SETUP_EXTRA","Setup global","Registro "+id+" não consta nos mods ativos inspecionados.","Pode pertencer a outro mundo; revise antes de limpar ou alterar.");
+            if(completeMods)foreach(var id in registered.Except(ids))Add(Severity.Warning,"SETUP_EXTRA","Setup global","Registro "+id+" não consta nos mods ativos inspecionados.","Pode pertencer a outro mundo; revise antes de limpar ou alterar.");
+            else Add(Severity.Info,"SETUP_INCOMPLETE","Setup global","A comparação dos registros extras é inconclusiva porque um arquivo Lua não pôde ser lido.","Corrija a configuração inválida antes de comparar ou limpar.");
             var settings=Path.Combine(install,"mods","modsettings.lua");
             if(File.Exists(settings)&&R(@"(?m)^\s*(ForceEnableMod|ForceDisableMod)\s*\(").IsMatch(Utf8.GetString(Read(settings))))Add(Severity.Warning,"FORCED_MODS","Instalação","Há regras de ativação/desativação forçada.","Revise modsettings.lua; o reset automático bloqueia esta situação.");
             var ugcRoot=Path.Combine(install,"ugc_mods");Engine.SafePath(ugcRoot);

@@ -131,6 +131,26 @@ public static class Engine {
         return new(source,target,install,exe,shards,fingerprint,inPlace,proposed!=null);
     }
     static bool IsWithin(string path,string parent){var a=Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);var b=Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar);return a.Equals(b,StringComparison.OrdinalIgnoreCase)||a.StartsWith(b+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}
+    // Calculate required backup space before copying, without following reparse points.
+    internal static long TreeBytes(string source){
+        SafePath(source);
+        long size=0;
+        foreach(var f in Directory.GetFiles(source)){SafePath(f);size=checked(size+new FileInfo(f).Length);}
+        foreach(var d in Directory.GetDirectories(source))size=checked(size+TreeBytes(d));
+        return size;
+    }
+    internal static long RequiredBackupBytes(long data){
+        if(data<0)throw new ArgumentOutOfRangeException(nameof(data));
+        return checked(data+Math.Max(64L*1024*1024,data/20));
+    }
+    static void CheckBackupSpace(string target,string setup,string backup){
+        long bytes=TreeBytes(target);
+        SafePath(setup);
+        if(File.Exists(setup))bytes=checked(bytes+new FileInfo(setup).Length);
+        var driveRoot=Path.GetPathRoot(Path.GetFullPath(backup))??throw new IOException("Unidade de backup não identificada.");
+        var drive=new DriveInfo(driveRoot);
+        if(!drive.IsReady||drive.AvailableFreeSpace<RequiredBackupBytes(bytes))throw new IOException("Espaço insuficiente ou indisponível para o backup do cluster. Libere espaço antes de continuar.");
+    }
     static void CopyTree(string source,string dest){
         SafePath(source);Directory.CreateDirectory(dest);
         foreach(var f in Directory.GetFiles(source)){SafePath(f);var d=System.IO.Path.Combine(dest,System.IO.Path.GetFileName(f));File.Copy(f,d);if(FileHash(f)!=FileHash(d))throw new IOException("Backup divergente.");}
@@ -171,6 +191,7 @@ public static class Engine {
         var caches=Directory.GetDirectories(mods,"workshop-*").Where(x=>affected.Contains(Path.GetFileName(x)[9..])).Concat(target.Shards.Select(s=>Path.Combine(ugc,s)).Where(Directory.Exists)).ToArray();
         foreach(var p in caches)SafeTree(p);
         // Snapshot every changed file and full destination before any mutation.
+        CheckBackupSpace(target.Path,setup,backup);
         Directory.CreateDirectory(backup);log("Backup: "+backup);CopyTree(target.Path,System.IO.Path.Combine(backup,"cluster"));
         var originals=new Dictionary<string,byte[]?>();foreach(var p in plan.Shards.Select(s=>Override(target,s.Name)).Append(setup)){SafePath(p);originals[p]=File.Exists(p)?File.ReadAllBytes(p):null;}
         if(originals[setup] is byte[] old)Atomic(System.IO.Path.Combine(backup,"dedicated_server_mods_setup.lua"),old);
