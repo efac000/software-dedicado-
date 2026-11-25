@@ -63,6 +63,21 @@ public static class Engine {
         return File.ReadAllBytes(path);
     }
     static string[] Ids(byte[] content)=>Lua.Active(Utf8.GetString(content).TrimStart('\uFEFF')).Keys.Order().ToArray();
+    // Only literal, individual Workshop registrations are supported; never execute setup Lua.
+    static readonly Regex SetupToken=new("""\G(?:\s+|--\[(?<eq>=*)\[.*?\]\k<eq>\]|--(?!\[=*\[)[^\r\n]*|ServerModSetup\s*\(\s*(?<q>["'])(?<id>[1-9][0-9]{0,19})\k<q>\s*\)\s*;?)""",RegexOptions.Singleline|RegexOptions.CultureInvariant,TimeSpan.FromSeconds(2));
+    static void CheckSetup(byte[]? bytes,HashSet<string> affected){
+        if(bytes is null)return;
+        var text=Utf8.GetString(bytes).TrimStart('\uFEFF');
+        for(int p=0;p<text.Length;){
+            var m=SetupToken.Match(text,p);
+            if(!m.Success||m.Length==0)throw new IOException("Setup global contém Lua não suportado ou coleção Workshop. Revise manualmente antes de continuar.");
+            if(m.Groups["id"].Success){
+                var id=m.Groups["id"].Value;
+                if(!ulong.TryParse(id,out _)||!affected.Contains(id))throw new IOException("Setup global contém mod não relacionado ao plano: "+id+". Confirme que a instalação é exclusiva e revise o arquivo manualmente.");
+            }
+            p+=m.Length;
+        }
+    }
     public static Plan Analyze(Cluster source,Cluster target,string install){
         if(string.IsNullOrWhiteSpace(install)||!Directory.Exists(install))throw new IOException("Selecione uma instalação válida do servidor dedicado.");
         install=System.IO.Path.GetFullPath(install);
@@ -77,8 +92,9 @@ public static class Engine {
         SafePath(setup);
         var settings=System.IO.Path.Combine(mods,"modsettings.lua"); SafePath(settings);
         if(File.Exists(settings)&&Regex.IsMatch(File.ReadAllText(settings),@"(?m)^\s*(ForceEnableMod|ForceDisableMod)\s*\("))throw new IOException("modsettings.lua contém regras forçadas; revise manualmente.");
+        var setupBytes=Read(setup,false);
         // Capture each override once; missing and empty-table files are different states.
-        var fingerprintParts=new List<string>{source.Path,target.Path,install,exe,FileHash(Path.Combine(source.Path,"cluster.ini")),FileHash(Path.Combine(target.Path,"cluster.ini")),File.Exists(setup)?FileHash(setup):"missing",File.Exists(settings)?FileHash(settings):"missing"};
+        var fingerprintParts=new List<string>{source.Path,target.Path,install,exe,FileHash(Path.Combine(source.Path,"cluster.ini")),FileHash(Path.Combine(target.Path,"cluster.ini")),setupBytes is null?"missing":Hash(setupBytes),File.Exists(settings)?FileHash(settings):"missing"};
         var shards=source.Shards.Select(s=>{
             var data=Read(Override(source,s),true)!;
             var previous=Read(Override(target,s),false);
@@ -89,6 +105,7 @@ public static class Engine {
             return new ShardPlan(s,data,Ids(data),previous is null?[]:Ids(previous));
         }).ToArray();
         if(!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado.");
+        CheckSetup(setupBytes,shards.SelectMany(s=>s.Old.Concat(s.Wanted)).ToHashSet(StringComparer.Ordinal));
         var fingerprint=Hash(Utf8.GetBytes(System.Text.Json.JsonSerializer.Serialize(fingerprintParts)));
         return new(source,target,install,exe,shards,fingerprint);
     }
