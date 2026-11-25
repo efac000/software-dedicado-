@@ -28,10 +28,18 @@ sealed partial class MainForm{
         }
     }
     static string UpdatePreference=>Path.Combine(Path.GetDirectoryName(PreferencesPath)!,"check-updates.txt");
-    void SaveUpdatePreference(bool enabled){
-        try{if(enabled){Directory.CreateDirectory(Path.GetDirectoryName(UpdatePreference)!);File.WriteAllText(UpdatePreference,"true");}
-            else if(File.Exists(UpdatePreference))File.Delete(UpdatePreference);}
-        catch{homeHint!.Text="Não foi possível gravar a preferência de atualização.";}
+    static bool TrySaveUpdatePreference(string path,bool enabled){
+        try{
+            if(enabled)WritePreferenceAtomically(path,"true");
+            else File.Delete(path);
+            return true;
+        }catch{return false;}
+    }
+    static void WritePreferenceAtomically(string path,string value){
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporary=path+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try{File.WriteAllText(temporary,value);File.Move(temporary,path,true);}
+        finally{if(File.Exists(temporary))File.Delete(temporary);}
     }
     async Task CheckOnStartup(){
         if(checkUpdates)await CheckBuild(true);
