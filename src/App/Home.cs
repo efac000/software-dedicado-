@@ -3,7 +3,8 @@ using Dedicado;
 namespace Gerenciador;
 sealed partial class MainForm{
     TableLayoutPanel? home;
-    Label? homeState,homeHint;
+    Label? homeState,homeHint,homeActivity;
+    int sessionEvents;DateTime? lastEvent;
     readonly List<Button> homeActions=new();
     Button? homeDetect;
     bool homeReady;
@@ -23,7 +24,7 @@ sealed partial class MainForm{
         }else if(light){
             Bg=Color.FromArgb(246,248,252);PanelColor=Color.White;Raised=Color.FromArgb(224,235,247);Ink=Color.FromArgb(24,38,60);Muted=Color.FromArgb(70,86,108);Accent=Color.FromArgb(16,88,130);Border=Color.FromArgb(130,149,173);SelectionColor=Color.FromArgb(205,225,247);WarningColor=Color.FromArgb(145,71,15);SuccessColor=Color.FromArgb(18,104,64);
         }else{
-            Bg=Color.FromArgb(9,15,30);PanelColor=Color.FromArgb(16,27,48);Ink=Color.FromArgb(237,244,255);Accent=Color.FromArgb(119,213,249);Border=Color.FromArgb(51,70,101);Muted=Color.FromArgb(170,187,211);Raised=Color.FromArgb(23,38,64);SelectionColor=Color.FromArgb(40,68,109);WarningColor=Color.FromArgb(255,190,112);SuccessColor=Color.FromArgb(122,221,176);
+            Bg=Color.FromArgb(12,17,27);PanelColor=Color.FromArgb(20,29,43);Ink=Color.FromArgb(237,244,255);Accent=Color.FromArgb(119,213,249);Border=Color.FromArgb(51,70,101);Muted=Color.FromArgb(170,187,211);Raised=Color.FromArgb(23,38,64);SelectionColor=Color.FromArgb(40,68,109);WarningColor=Color.FromArgb(255,190,112);SuccessColor=Color.FromArgb(122,221,176);
         }
     }
     static string UpdatePreference=>Path.Combine(Path.GetDirectoryName(PreferencesPath)!,"check-updates.txt");
@@ -39,21 +40,22 @@ sealed partial class MainForm{
     sealed record LocalPaths(string Install,string Worlds,string? World);
     static string PreferencesPath=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Gerenciador de Dedicado","paths.json");
     void BuildHome(){
-        home=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=7,BackColor=Bg};
-        foreach(var h in new[]{54,68,72,46})home.RowStyles.Add(new RowStyle(SizeType.Absolute,h));
+        home=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=8,BackColor=Bg};
+        foreach(var h in new[]{48,58,80,46})home.RowStyles.Add(new RowStyle(SizeType.Absolute,h));
         home.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        home.RowStyles.Add(new RowStyle(SizeType.Absolute,84));
-        home.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
-        var brand=new Label{Text="Gerenciador de Dedicado   |   1.0.0",Font=new Font("Segoe UI Semibold",20),Dock=DockStyle.Fill,ForeColor=Ink,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft};
+        home.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+        home.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        home.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+        var brand=new Label{Text="Visão geral",Font=new Font("Segoe UI Semibold",20),Dock=DockStyle.Fill,ForeColor=Ink,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft};
         home.Controls.Add(brand,0,0);
-        var intro=new Label{Text="O que deseja fazer?\nEscolha uma tarefa. Nenhum arquivo será alterado sem sua autorização.",Dock=DockStyle.Fill,ForeColor=Ink,TextAlign=ContentAlignment.MiddleLeft};
+        var intro=new Label{Text="Gerenciador de Dedicado · 1.0.0\nEscolha uma tarefa. Nenhuma alteração sem sua autorização.",Dock=DockStyle.Fill,ForeColor=Ink,TextAlign=ContentAlignment.MiddleLeft};
         home.Controls.Add(intro,0,1);
         homeState=new Label{Dock=DockStyle.Fill,BackColor=Raised,ForeColor=Ink,Padding=new Padding(12,5,12,5),TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true,AccessibleName="Estado da seleção do servidor"};
         home.Controls.Add(homeState,0,2);
         var setup=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,AutoScroll=true};
         homeDetect=new Button{Text="&Detectar e escolher"};Style(homeDetect);
         homeDetect.Click+=async(_,_)=>{await AutoLocate();RefreshHome();};
-        var manual=new Button{Text="&Escolher pasta"};Style(manual);manual.Click+=(_,_)=>OpenTask(2,false);
+        var manual=new Button{Text="&Escolher pasta"};Style(manual);manual.Click+=(_,_)=>OpenTask(2,false,section:"environment");
         var prefs=new Button{Text="&Preferências"};Style(prefs);prefs.Click+=(_,_)=>ShowPreferences();
         setup.Controls.AddRange(new Control[]{homeDetect,manual,prefs});
         homeActions.AddRange(new[]{homeDetect,manual,prefs});
@@ -63,15 +65,15 @@ sealed partial class MainForm{
         cards.RowStyles.Add(new RowStyle(SizeType.Percent,50));cards.RowStyles.Add(new RowStyle(SizeType.Percent,50));
         void Card(string title,string description,Action run,int x,int y){
             var b=new Button{Text=title+"\n"+description,AccessibleName=title.Replace("&",""),AccessibleDescription=description,Dock=DockStyle.Fill,Margin=new Padding(4),TextAlign=ContentAlignment.MiddleLeft};
-            Style(b);b.AutoSize=false;b.Font=new Font("Segoe UI",12);b.Padding=new Padding(12,4,12,4);b.Click+=(_,_)=>run();
+            b.AutoSize=false;b.FlatStyle=FlatStyle.Flat;b.BackColor=PanelColor;b.ForeColor=Ink;b.FlatAppearance.BorderColor=Border;DecorateButton(b,true);b.Font=new Font("Segoe UI",12);b.Padding=new Padding(12,4,12,4);b.Click+=(_,_)=>run();
             cards.Controls.Add(b,x,y);homeActions.Add(b);
         }
         Card("&Gerenciar mods","Adicionar, remover e configurar",()=>OpenTask(2,false),0,0);
-        Card("&Atualizar servidor","SteamCMD e validação",()=>OpenTask(2,false,()=>UpdateDedicated(),true),1,0);
-        Card("Diagn&osticar","Identificar problemas sem alterar arquivos",()=>OpenTask(2,false,()=>Diagnose()),0,1);
-        Card("&Backups","Consultar e recuperar configurações",()=>OpenTask(2,false,()=>OpenBackups()),1,1);
+        Card("&Atualizar servidor","SteamCMD e validação",()=>OpenTask(2,false,()=>UpdateDedicated(),true,"update"),1,0);
+        Card("Diagn&osticar","Identificar problemas sem alterar arquivos",()=>OpenTask(2,false,()=>Diagnose(),section:"diagnostic"),0,1);
+        Card("&Backups","Consultar e recuperar configurações",()=>OpenTask(2,false,()=>OpenBackups(),section:"backups"),1,1);
         home.Controls.Add(cards,0,4);
-        var footer=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,WrapContents=true};
+        var footer=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=false,WrapContents=true};
         var advanced=new Button{Text="&Ferramentas avançadas"};Style(advanced);advanced.Click+=(_,_)=>OpenTask(2,true);
         var help=new Button{Text="&Como usar"};Style(help);help.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/#uso");
         var updates=new Button{Text="Verificar at&ualização"};Style(updates);updates.Click+=async(_,_)=>await CheckBuild();
@@ -82,8 +84,9 @@ sealed partial class MainForm{
         feedback.Click+=(_,_)=>ShowFeedback();footer.Controls.Add(feedback);homeActions.Add(feedback);
         home.Controls.Add(footer,0,5);
         homeHint=new Label{Dock=DockStyle.Fill,ForeColor=Muted,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft,AccessibleName="Orientação da tela inicial"};
-        home.Controls.Add(homeHint,0,6);
-        homeHost=CreateViewport(home,760,580);Controls.Add(homeHost);homeHost.Visible=false;homeReady=true;
+        homeActivity=new Label{Dock=DockStyle.Fill,BackColor=PanelColor,ForeColor=Muted,Padding=new Padding(10,4,10,4),TextAlign=ContentAlignment.MiddleLeft,AccessibleName="Atividade recente",AutoEllipsis=true};
+        home.Controls.Add(homeActivity,0,6);home.Controls.Add(homeHint,0,7);
+        homeHost=CreateViewport(home,760,640);Controls.Add(homeHost);homeHost.Visible=false;homeReady=true;
         if(SystemInformation.HighContrast)UseSystemColors(home);
         RefreshHome();
     }
@@ -95,14 +98,14 @@ sealed partial class MainForm{
     void ShowHome(){
         if(busy||home==null)return;
         InvalidatePlan();mainHost!.Visible=false;homeHost!.Visible=true;homeHost.BringToFront();homeHost.AutoScrollPosition=Point.Empty;
-        RefreshHome();homeDetect?.Focus();
+        SelectNav("home");RefreshHome();homeDetect?.Focus();
     }
-    void OpenTask(int selectedMode,bool advanced,Func<Task>? action=null,bool needsSelection=false){
+    void OpenTask(int selectedMode,bool advanced,Func<Task>? action=null,bool needsSelection=false,string? section=null){
         if(busy||home==null)return;
         InvalidatePlan();homeHost!.Visible=false;mainHost!.Visible=true;mainHost.BringToFront();mainHost.AutoScrollPosition=Point.Empty;
         if(mode.SelectedIndex!=selectedMode)mode.SelectedIndex=selectedMode;
         mainLayout!.RowStyles[1].Height=advanced?LogicalToDeviceUnits(46):0;mode.Parent!.Visible=advanced;
-        RefreshMode();
+        RefreshMode();SelectNav(section??(advanced?"advanced":"mods"));
         if(action!=null){
             if(needsSelection&&(target.SelectedItem==null||string.IsNullOrWhiteSpace(install.Text))){
                 status.Text="Escolha a instalação e o mundo. Depois use o botão da tarefa desejada.";
@@ -118,18 +121,26 @@ sealed partial class MainForm{
     }
     void RefreshHome(){
         if(!homeReady||homeState==null||homeHint==null)return;
-        foreach(var b in homeActions)b.Enabled=!busy;
+        foreach(var b in homeActions)b.Enabled=!busy;RefreshActivity();
         if(busy){SetAccessibleStatus(homeState,"Localizando ou verificando dados…");return;}
         var selected=target.SelectedItem as Cluster;
         bool installed=!string.IsNullOrWhiteSpace(install.Text)&&Directory.Exists(install.Text);
-        SetAccessibleStatus(homeState,installed&&selected!=null
-            ?"Servidor e mundo selecionados (validação na análise)\n"+selected.Name+"  |  "+selected.FolderName
-            :installed?"Instalação selecionada. Escolha o mundo que deseja gerenciar."
-            :"Nenhuma instalação selecionada. Use Detectar e escolher ou informe o caminho.");
+        var state=installed?(selected!=null?"Servidor e mundo selecionados (validação na análise)":"Instalação selecionada; escolha o mundo."):
+            "Instalação dedicada não selecionada. Use Detectar e escolher.";
+        var world=selected==null?"Mundo: não selecionado":"Mundo: "+selected.Name+" | "+selected.FolderName;
+        var steam=selectedSteamCmd!=null&&File.Exists(selectedSteamCmd)?"SteamCMD: localizado":"SteamCMD: verificar na atualização";
+        SetAccessibleStatus(homeState,state+"\n"+world+"    •    "+steam);
         SetAccessibleStatus(homeHint,recoveryBlocked?recoveryNotice.Text:"Copiar mundos, reinstalar e editar Lua ficam em Ferramentas avançadas.");
     }
+    void RefreshActivity(){
+        if(homeActivity==null)return;
+        var value=busy?"Atividade recente · Operação em andamento":
+            lastEvent.HasValue?$"Atividade recente · {sessionEvents} eventos nesta sessão | último às {lastEvent:HH:mm:ss}":
+            "Atividade recente · Nenhuma operação nesta sessão.";
+        SetAccessibleStatus(homeActivity,value);
+    }
     void ShowPreferences(){
-        using var dialog=new Form{Text="Preferências",Size=new Size(660,420),MinimumSize=new Size(600,380),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
+        using var dialog=new ModernDialog{Text="Preferências",Size=new Size(660,420),MinimumSize=new Size(600,380),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(16),ColumnCount=1,RowCount=7};
         foreach(var h in new[]{46,48,38,46,46,44})layout.RowStyles.Add(new RowStyle(SizeType.Absolute,h));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
@@ -137,8 +148,8 @@ sealed partial class MainForm{
         var theme=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill,AccessibleName="Tema da interface",BackColor=PanelColor,ForeColor=Ink};
         theme.Items.AddRange(new object[]{"Automático (Windows)","Escuro","Claro"});theme.SelectedIndex=CurrentTheme() switch{"dark"=>1,"light"=>2,_=>0};
         var auto=new CheckBox{Text="Verificar builds ao abrir (consulta ao GitHub)",Checked=checkUpdates,AutoSize=true,AccessibleDescription="Não baixa nem instala automaticamente."};
-        var save=new Button{Text="Salvar caminhos selecionados"};Style(save);save.Click+=(_,_)=>{SavePaths();MessageBox.Show(dialog,homeHint!.Text,"Caminhos");};
-        var forget=new Button{Text="Esquecer caminhos salvos"};Style(forget);forget.Click+=(_,_)=>{ForgetPaths();MessageBox.Show(dialog,homeHint!.Text,"Caminhos");};
+        var save=new Button{Text="Salvar caminhos selecionados"};Style(save);save.Click+=(_,_)=>{SavePaths();Notice.Show(dialog,homeHint!.Text,"Caminhos");};
+        var forget=new Button{Text="Esquecer caminhos salvos"};Style(forget);forget.Click+=(_,_)=>{ForgetPaths();Notice.Show(dialog,homeHint!.Text,"Caminhos");};
         var apply=new Button{Text="Salvar preferências",DialogResult=DialogResult.OK};Style(apply);
         var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(cancel);
         var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft};actions.Controls.AddRange(new Control[]{cancel,apply});
@@ -151,11 +162,17 @@ sealed partial class MainForm{
         catch{homeHint!.Text="Não foi possível salvar o tema.";}
     }
     void ShowSessionLog(){
-        using var dialog=new Form{Text="Registro desta sessão",Size=new Size(820,500),MinimumSize=new Size(560,340),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
-        var contents=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,BackColor=PanelColor,ForeColor=Ink,Text=log.Text,AccessibleName="Registro local das operações"};
+        using var dialog=new ModernDialog{Text="Registro desta sessão",Size=new Size(820,500),MinimumSize=new Size(560,340),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
+        var snapshot=log.Text;
+        var contents=new TextBox{Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,BackColor=PanelColor,ForeColor=Ink,Text=snapshot.Length==0?"Nenhuma operação nesta sessão.":snapshot,AccessibleName="Registro local das operações"};
+        var filter=new TextBox{Width=220,PlaceholderText="Buscar no registro",BackColor=PanelColor,ForeColor=Ink,AccessibleName="Pesquisar registro"};
+        filter.TextChanged+=(_,_)=>contents.Text=string.Join(Environment.NewLine,snapshot.Split('\n').Where(line=>line.Contains(filter.Text,StringComparison.OrdinalIgnoreCase)).Select(line=>line.TrimEnd('\r')));
+        var tools=new FlowLayoutPanel{Dock=DockStyle.Top,Height=45,WrapContents=true,AutoScroll=true};
+        var copy=new Button{Text="Copiar visualização"};Style(copy);copy.Click+=(_,_)=>{try{if(contents.TextLength>0)Clipboard.SetText(contents.Text);}catch(Exception){Notice.Show(dialog,"Não foi possível copiar. Selecione o texto e use Ctrl+C.","Registro");}};
+        tools.Controls.AddRange(new Control[]{filter,copy});
         var note=new Label{Dock=DockStyle.Top,Height=44,Text="Registro somente desta sessão. Pode conter caminhos locais; revise antes de compartilhar.",ForeColor=Muted};
         var close=new Button{Text="Fechar",Dock=DockStyle.Bottom,DialogResult=DialogResult.Cancel};Style(close);
-        dialog.Controls.Add(contents);dialog.Controls.Add(note);dialog.Controls.Add(close);dialog.CancelButton=close;
+        dialog.Controls.Add(contents);dialog.Controls.Add(tools);dialog.Controls.Add(note);dialog.Controls.Add(close);dialog.CancelButton=close;
         dialog.ShowDialog(this);
     }
     void LoadPaths(){
@@ -211,13 +228,13 @@ sealed partial class MainForm{
         }catch{message="Não foi possível verificar a atualização agora. O programa continua utilizável offline.";}
         finally{Busy(false);}
         SetAccessibleStatus(homeHint!,message);
-        if(!quiet&&MessageBox.Show(this,message+"\n\nAbrir o site oficial?","Atualizações",MessageBoxButtons.YesNo,MessageBoxIcon.Information,MessageBoxDefaultButton.Button2)==DialogResult.Yes)Open("https://efac000.github.io/software-dedicado-/#baixar");
+        if(!quiet&&Notice.Show(this,message+"\n\nAbrir o site oficial?","Atualizações",MessageBoxButtons.YesNo,MessageBoxIcon.Information,MessageBoxDefaultButton.Button2)==DialogResult.Yes)Open("https://efac000.github.io/software-dedicado-/#baixar");
     }
     internal bool VerifyHomeLayout(){
         if(home==null)return false;
         busy=false;ShowHome();
         foreach(var size in new[]{MinimumSize,new Size(Math.Max(MinimumSize.Width,1100),Math.Max(MinimumSize.Height,830))}){
-            Size=size;PerformLayout();ResizeViewport(homeHost!,home,760,580);home.PerformLayout();
+            Size=size;PerformLayout();ResizeViewport(homeHost!,home,760,640);home.PerformLayout();
             foreach(var b in homeActions){
                 if(b.Width<=0||b.Height<=0||string.IsNullOrWhiteSpace(b.AccessibleName??b.Text))return false;
                 for(Control? c=b;c?.Parent!=null&&c.Parent!=homeHost;c=c.Parent)if(!c.Parent.ClientRectangle.Contains(c.Bounds))return false;

@@ -2,7 +2,7 @@ using Dedicado;
 namespace Gerenciador;
 sealed partial class MainForm{
     WorkshopHit? BrowseWorkshop(IWin32Window owner,string initial,string shard){
-        using var dialog=new Form{Text="Pesquisa global Workshop - "+shard,Size=new Size(850,540),MinimumSize=new Size(620,420),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
+        using var dialog=new ModernDialog{Text="Pesquisa global Workshop - "+shard,Size=new Size(850,540),MinimumSize=new Size(620,420),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
         var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=85,AutoScroll=true};
         var key=new TextBox{Width=210,UseSystemPasswordChar=true,PlaceholderText="Chave Steam Web API (usuário)",BackColor=PanelColor,ForeColor=Ink,MaxLength=32};
         var query=new TextBox{Width=240,Text=initial,PlaceholderText="Nome do mod",BackColor=PanelColor,ForeColor=Ink,MaxLength=120};
