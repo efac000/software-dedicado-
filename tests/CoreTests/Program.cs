@@ -19,6 +19,20 @@ try{
     var install=Path.Combine(root,"install");Directory.CreateDirectory(Path.Combine(install,"bin64"));Directory.CreateDirectory(Path.Combine(install,"mods"));File.WriteAllText(Path.Combine(install,"bin64","dontstarve_dedicated_server_nullrenderer_x64.exe"),"fake");
     var s=Engine.Load(conf,"1");var t=Engine.Load(conf,"2");
     Reject(()=>Engine.Analyze(s,s,install));var plan=Engine.Analyze(s,t,install);
+    // A global setup may service another world; never silently replace unrelated entries.
+    var setupFile=Path.Combine(install,"mods","dedicated_server_mods_setup.lua");
+    File.WriteAllText(setupFile,"-- ServerModSetup(\"555\")\nServerModSetup(\"99\")\nServerModSetup('42');\n");
+    Check(Engine.Analyze(s,t,install).Ids.SequenceEqual(new[]{"42"}),"Setup literal válido rejeitado");
+    File.AppendAllText(setupFile,"ServerModSetup(\"555\")\n");
+    Reject(()=>Engine.Analyze(s,t,install));
+    Check(File.ReadAllText(setupFile).Contains("555"),"Setup alterado durante análise");
+    File.WriteAllText(setupFile,"ServerModCollectionSetup(\"123\")\n");
+    Reject(()=>Engine.Analyze(s,t,install));
+    File.WriteAllText(setupFile,"--[=[ ServerModSetup(\"555\") ]=]\nServerModSetup(\"99\")\n");
+    Check(Engine.Analyze(s,t,install).Ids.Length==1,"Comentário longo de setup rejeitado");
+    File.WriteAllText(setupFile,"--[[ comentário não terminado\nServerModSetup(\"99\")");
+    Reject(()=>Engine.Analyze(s,t,install));
+    File.Delete(setupFile);
     var serverIni=Path.Combine(t.Path,"Master","server.ini");
     var previousIni=File.ReadAllText(serverIni);
     File.AppendAllText(serverIni,"\nserver_port = 10999\n");
