@@ -151,7 +151,7 @@ sealed partial class MainForm{
         void Add(string name,string glyph,string section,Action action){
             var b=new ModernButton{Text=name,AccessibleName=name,AccessibleDescription="Navegação: "+name,Height=LogicalToDeviceUnits(37),Width=LogicalToDeviceUnits(168),AutoSize=false,Margin=new Padding(2,2,2,2),TextAlign=ContentAlignment.MiddleLeft,Tag=section,FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink};
             b.FlatAppearance.BorderColor=Border;
-            DecorateButton(b,false,glyph,true);b.Click+=(_,_)=>{if(busy)return;action();};
+            DecorateButton(b,false,glyph,true);b.Click+=(_,_)=>NavigateSidebar(section,action);
             stack.Controls.Add(b);navButtons.Add(b);hints.SetToolTip(b,name);
         }
         Add("Início","home","home",ShowHome);

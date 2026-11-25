@@ -147,11 +147,19 @@ static class AccessibilityTests{
                     Call(form,"ShowSessionLog");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"History not embedded");Capture(form,"activity-"+theme);
                     Call(form,"ShowHome");Call(form,"ShowGettingStarted");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"Guide not embedded");Capture(form,"guide-"+theme);
                     Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_PAGES_AND_LIVE_THEME_PASS "+theme);
+                    Call(form,"OpenTask",2,false,null,false,"environment");
+                    form.Size=new Size(1083,821);form.PerformLayout();Application.DoEvents();
+                    var environmentButtons=Desc(main).OfType<Button>().Where(b=>b.Visible).ToArray();
+                    Assert(environmentButtons.Length>=8,"Environment buttons missing");
+                    foreach(var b in environmentButtons){Reachable(mainHost,b);VerifyRounded(b);}
+                    Console.WriteLine("ENVIRONMENT_PIXEL_PERIMETER_PASS "+theme);
+                    Call(form,"ShowHome");Application.DoEvents();
                     Call(form,"OpenTask",2,false,null,false,"mods");Call(form,"Busy",true);
                     using(var content=new Panel()){
                         var cancel=new Button{Text="Cancelar"};content.Controls.Add(cancel);cancel.Click+=(_,_)=>Call(form,"FinishTaskPage",false);
                         var pending=(Task<bool>)Call(form,"ShowTaskPage","mods",content,480,420,cancel)!;Application.DoEvents();
                         Assert(Field<Panel>(form,"taskPageHost").Visible&&!mainHost.Visible,"Task page not embedded");
+                        Assert(Field<List<Button>>(form,"navButtons").All(b=>!b.Enabled),"Catalog navigation unlocked during editing");
                         cancel.PerformClick();
                         WaitFor(()=>pending.IsCompleted,"Task page did not finish");
                         Assert(pending.IsCompletedSuccessfully&&!pending.Result&&mainHost.Visible,"Task page cancellation did not restore workspace");
@@ -182,8 +190,10 @@ static class AccessibilityTests{
                     var diagnosticPage=Field<Panel>(form,"taskPageHost");
                     Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing: "+Field<TextBox>(form,"log").Text);
                     Assert(Desc(diagnosticPage).OfType<Label>().Any(l=>l.Text=="Pesquisar:"),"Diagnostic search label missing");foreach(var b in Desc(diagnosticPage).OfType<Button>())VerifyRounded(b);Capture(form,"diagnostic-"+theme);
-                    Desc(diagnosticPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar do diagnóstico").PerformClick();
-                    WaitFor(()=>diag.IsCompleted,"Diagnostic did not return");
+                    var navButtons=Field<List<Button>>(form,"navButtons");
+                    Assert(navButtons.All(b=>b.Enabled),"Read-only diagnostic sidebar locked");
+                    navButtons.Single(b=>(string)b.Tag! == "environment").PerformClick();
+                    WaitFor(()=>diag.IsCompleted&&Field<string>(form,"selectedSection")=="environment","Diagnostic sidebar navigation did not return");
                     Assert(diag.IsCompletedSuccessfully&&mainHost.Visible,"Diagnostic did not restore workspace");
                     var backupRoot=Path.Combine(fixture,"backup-fixture");Directory.CreateDirectory(backupRoot);
                     FormType.GetField("backupRootOverride",Instance)!.SetValue(form,backupRoot);
@@ -192,9 +202,11 @@ static class AccessibilityTests{
                     Assert(!backupTask.IsCompleted,"Backup page ended before display");
                     var backupPage=Field<Panel>(form,"taskPageHost");
                     Assert(Desc(backupPage).OfType<Label>().Any(l=>l.Text.Contains("Nenhum backup encontrado")),"Missing empty backup state");foreach(var b in Desc(backupPage).OfType<Button>())VerifyRounded(b);Capture(form,"backups-"+theme);
-                    Desc(backupPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar dos backups").PerformClick();
-                    WaitFor(()=>backupTask.IsCompleted,"Backups did not return");
-                    Assert(backupTask.IsCompletedSuccessfully&&mainHost.Visible,"Backups did not restore workspace");
+                    Assert(navButtons.All(b=>b.Enabled),"Read-only backups sidebar locked");
+                    navButtons.Single(b=>(string)b.Tag! == "home").PerformClick();
+                    WaitFor(()=>backupTask.IsCompleted&&host.Visible,"Backups sidebar navigation did not return home");
+                    Assert(backupTask.IsCompletedSuccessfully&&host.Visible,"Backups did not restore home");
+                    Console.WriteLine("READ_ONLY_SIDEBAR_NAVIGATION_PASS "+theme);
                     FormType.GetField("backupRootOverride",Instance)!.SetValue(form,null);
                     Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("CATALOG_SHARD_DIAGNOSTIC_BACKUP_PASS "+theme);
                 }
