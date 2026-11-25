@@ -3,7 +3,7 @@ namespace Gerenciador;
 sealed partial class MainForm {
     async Task UpdateDedicated(){
         if(busy)return;
-        if(target.SelectedItem is not Cluster chosen){Write("Selecione o cluster do dedicado antes de atualizar.");return;}
+        if(target.SelectedItem is not Cluster chosen||string.IsNullOrWhiteSpace(install.Text)){status.Text="Escolha a instalação e o mundo antes de atualizar.";Write("Selecione a instalação e o cluster do dedicado antes de atualizar.");target.Focus();return;}
         var installation=install.Text;
         var existing=selectedSteamCmd;
         if(existing!=null){try{Engine.SafePath(existing);if(!File.Exists(existing))existing=null;}catch{existing=null;}}
