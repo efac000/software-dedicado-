@@ -91,6 +91,16 @@ static class AccessibilityTests{
                     Call(form,"ShowSessionLog");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"History not embedded");
                     Call(form,"ShowHome");Call(form,"ShowGettingStarted");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"Guide not embedded");
                     Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_PAGES_AND_LIVE_THEME_PASS "+theme);
+                    Call(form,"OpenTask",2,false,null,false,"mods");Call(form,"Busy",true);
+                    using(var content=new Panel()){
+                        var cancel=new Button{Text="Cancelar"};content.Controls.Add(cancel);cancel.Click+=(_,_)=>Call(form,"FinishTaskPage",false);
+                        var pending=(Task<bool>)Call(form,"ShowTaskPage","mods",content,480,420,cancel)!;Application.DoEvents();
+                        Assert(Field<Panel>(form,"taskPageHost").Visible&&!mainHost.Visible,"Task page not embedded");
+                        cancel.PerformClick();
+                        for(int i=0;i<100&&!pending.IsCompleted;i++){Application.DoEvents();System.Threading.Thread.Sleep(5);}
+                        Assert(pending.IsCompletedSuccessfully&&!pending.Result&&mainHost.Visible,"Task page cancellation did not restore workspace");
+                    }
+                    Call(form,"Busy",false);Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_TASK_CANCEL_PASS "+theme);
                 }
                 var state=Field<Label>(form,"homeState");
                 Assert(state.AccessibilityObject.Name?.Contains("QA Accessibility")==true,"Status accessible name not updated");

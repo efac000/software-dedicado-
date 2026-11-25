@@ -8,7 +8,8 @@ sealed partial class MainForm{
     // The vector paths are original line drawings, rendered locally, not downloaded.
     static string ButtonIcon(string text){
         var t=text.Replace("&","").ToLowerInvariant();
-        if(t.Contains("início"))return "home";
+        if(t.Contains("início")||t.Contains("voltar"))return "home";
+        if(t.Contains("primeiros passos")||t.Contains("como usar"))return "info";
         if(t.Contains("feedback")||t.Contains("sugerir")||t.Contains("relatar"))return "chat";
         if(t.Contains("backup")||t.Contains("recuper"))return "archive";
         if(t.Contains("diagn"))return "pulse";
@@ -204,12 +205,13 @@ sealed partial class MainForm{
     // A real indeterminate state; no invented percentages. Animation respects Windows effects.
     sealed class ActivityIndicator:Control{
         readonly System.Windows.Forms.Timer clock=new(){Interval=100};
-        int frame;
+        int frame,completed,total;
+        public void SetPhase(int done,int count){total=Math.Max(0,count);completed=Math.Clamp(done,0,total);AccessibleName=total>0?$"Etapas concluídas: {completed} de {total}":"Operação em andamento";clock.Enabled=total==0&&Visible&&SystemInformation.UIEffectsEnabled&&!SystemInformation.HighContrast;Invalidate();}
         public ActivityIndicator(){
             SetStyle(ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.UserPaint,true);
             AccessibleName="Operação em andamento";AccessibleRole=AccessibleRole.ProgressBar;
             clock.Tick+=(_,_)=>{frame=(frame+1)%20;Invalidate();};
-            VisibleChanged+=(_,_)=>{clock.Enabled=Visible&&SystemInformation.UIEffectsEnabled&&!SystemInformation.HighContrast;Invalidate();};
+            VisibleChanged+=(_,_)=>{clock.Enabled=total==0&&Visible&&SystemInformation.UIEffectsEnabled&&!SystemInformation.HighContrast;Invalidate();};
         }
         protected override void OnPaint(PaintEventArgs e){
             e.Graphics.Clear(Parent?.BackColor??Bg);
@@ -218,7 +220,8 @@ sealed partial class MainForm{
             using var path=Rounded(r,4);using var track=new SolidBrush(PanelColor);g.FillPath(track,path);
             using var edge=new Pen(Border);g.DrawPath(edge,path);
             var state=g.Save();g.SetClip(path);
-            using var brush=new SolidBrush(Accent);int segment=Math.Max(12,r.Width/3);
+            using var brush=new SolidBrush(Accent);if(total>0){int width=(int)((long)r.Width*completed/total);if(width>0)g.FillRectangle(brush,r.X,r.Y,width,r.Height);g.Restore(state);return;}
+            int segment=Math.Max(12,r.Width/3);
             int x=r.X+frame*(r.Width+segment)/19-segment;
             if(!clock.Enabled)x=r.X+r.Width/3;
             g.FillRectangle(brush,x,r.Y,segment,r.Height);g.Restore(state);

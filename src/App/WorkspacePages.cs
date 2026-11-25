@@ -4,6 +4,22 @@ sealed partial class MainForm{
     sealed class BufferedPanel:Panel{public BufferedPanel(){DoubleBuffered=true;ResizeRedraw=true;}}
     sealed class BufferedTable:TableLayoutPanel{public BufferedTable(){DoubleBuffered=true;ResizeRedraw=true;}}
     Panel? internalPage;
+    TaskCompletionSource<bool>? taskPageResult;
+    Panel? taskPageHost;
+    Button? taskPageCancel;
+    async Task<bool> ShowTaskPage(string section,Control content,int width,int height,Button cancel){
+        if(!busy||taskPageResult!=null)throw new InvalidOperationException("Área de trabalho ocupada.");
+        var completion=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);taskPageResult=completion;taskPageCancel=cancel;
+        HideInternalPage();homeHost!.Visible=false;mainHost!.Visible=false;
+        var viewport=CreateViewport(content,width,height);taskPageHost=viewport;workspace!.Controls.Add(viewport);viewport.BringToFront();
+        try{SelectNav(section);ModernControls(content);PrepareAccessibility(content);if(SystemInformation.HighContrast)UseSystemColors(content);cancel.Focus();return await completion.Task;}
+        finally{taskPageResult=null;taskPageCancel=null;taskPageHost=null;viewport.Controls.Remove(content);workspace.Controls.Remove(viewport);viewport.Dispose();mainHost.Visible=true;mainHost.BringToFront();}
+    }
+    void FinishTaskPage(bool accepted){taskPageResult?.TrySetResult(accepted);}
+    protected override bool ProcessCmdKey(ref Message msg,Keys keyData){
+        if(keyData==Keys.Escape&&taskPageCancel is {Enabled:true,Visible:true}){taskPageCancel.PerformClick();return true;}
+        return base.ProcessCmdKey(ref msg,keyData);
+    }
     static string ActivityPath=>Path.Combine(Path.GetDirectoryName(PreferencesPath)!,"activity-days.json");
     static Dictionary<string,int> ReadActivity(){
         try{
