@@ -3,6 +3,7 @@ static void Check(bool b,string message){if(!b)throw new Exception(message);}
 static void Reject(Action f){try{f();}catch(ArgumentException){return;}catch(FormatException){return;}catch(IOException){return;}throw new Exception("Entrada inválida aceita");}
 SteamUpdateTests.Run();
 SteamBootstrapTests.Run();
+InterruptedTests.Run();
 foreach(var x in new[]{"","0","-1","1a2","1.5"," 1","1 ","01","١","9999999999","1\n"})Check(!Engine.ValidNumber(x),"Número inválido: "+x);
 Check(Engine.ValidNumber("1")&&Engine.ValidNumber("12"),"Número válido rejeitado");
 var mods=Lua.Active("""return { ["workshop-123"]={configuration_options={enabled=false,nested={x="}"},items={1,2}},enabled=true}, ["workshop-456"]={enabled=false}, }""");

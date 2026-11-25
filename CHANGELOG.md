@@ -56,3 +56,7 @@ Validação de uma instalação DST real ainda necessária.
 ## Revisão de instalação assistida — 1.0.0
 - Detecção e download opcional do SteamCMD oficial em pasta local isolada, sem sobrescrita nem execução automática.
 - Extração restrita, limites de tamanho, verificação PE e testes contra entradas ZIP inválidas.
+
+## Revisão de interrupções — 1.0.0
+- Manifesto persistente anterior às alterações; bloqueio de nova manutenção enquanto houver operação pendente.
+- Recuperação assistida de configurações e caches afetados; rejeita divergências e preserva saves.

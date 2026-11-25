@@ -57,3 +57,6 @@ Use **Atualizar dedicado** com uma instalação independente, já existente, e o
 
 ### Instalação assistida do SteamCMD
 Quando o SteamCMD não é encontrado, o atualizador oferece baixar o pacote Windows da CDN da Valve para uma pasta isolada em LocalAppData. Exige consentimento, HTTPS sem redirecionamentos, limite de 32 MiB, arquivo ZIP com apenas steamcmd.exe, cabeçalho PE e destino inexistente. O SHA-256 local é registrado para diagnóstico, não é uma assinatura da Valve nem uma verificação contra hash oficial. O instalador não executa o programa; a atualização exige as confirmações seguintes. O pacote real e o auto-update do SteamCMD ainda precisam de homologação Windows.
+
+## Recuperação de interrupções
+Novas reinstalações registram um manifesto pendente antes de alterar caches e configurações. Se houver encerramento inesperado, novas manutenções pelo aplicativo são bloqueadas. A Central de backups oferece recuperação do cluster original com dupla confirmação, conferência dos hashes e caminhos, e isolamento de caches novos. Não reverte saves. Alterações externas, quarentena perdida ou manifesto incompleto exigem recuperação manual. Não abrange interrupções do SteamCMD nem garante durabilidade contra toda falha de hardware/sistema de arquivos. Preserve o backup e mantenha o servidor desligado.
