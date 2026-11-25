@@ -18,6 +18,7 @@ sealed class MainForm:Form{
     readonly DataGridView grid=new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AllowUserToResizeRows=false};
     readonly CheckBox exclusive=new(){Text="Confirmo: instalação exclusiva, UGC padrão, servidor e reinício automático desligados.",AutoSize=true};
     readonly CheckBox online=new(){Text="Consultar nomes na Steam Workshop (envia somente IDs públicos).",Checked=true,AutoSize=true};
+    readonly Button diagnose=new(){Text="Diagnóstico do dedicado"};
     readonly Button scan=new(){Text="Localizar clusters"},analyze=new(){Text="Analisar (sem alterações)"},reset=new(){Text="Confirmar e reinstalar",Enabled=false},backups=new(){Text="Abrir backups"},website=new(){Text="Site / atualizações"};
     readonly Label status=new(){Text="Selecione as pastas e os mundos.",AutoSize=false,Dock=DockStyle.Fill,ForeColor=Muted,AutoEllipsis=true};
     readonly ComboBox mode=new(){DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill};
@@ -44,13 +45,13 @@ sealed class MainForm:Form{
         foreach(var h in new[]{"Mod / Workshop","ID","Shard","Alteração"})grid.Columns.Add(h,h);
         grid.Columns[0].FillWeight=180;main.Controls.Add(grid);main.Controls.Add(exclusive);
         log.Dock=DockStyle.Fill;log.BackColor=PanelColor;log.ForeColor=Ink;log.BorderStyle=BorderStyle.FixedSingle;log.Font=new Font("Consolas",9);main.Controls.Add(log);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill};actions.Controls.Add(reset);actions.Controls.Add(backups);actions.Controls.Add(website);main.Controls.Add(actions);main.Controls.Add(status);
-        foreach(var b in new[]{scan,analyze,reset,backups,website})Style(b);analyze.BackColor=Accent;analyze.ForeColor=Bg;analyze.FlatAppearance.MouseOverBackColor=Color.FromArgb(163,230,255);analyze.FlatAppearance.MouseDownBackColor=Color.FromArgb(100,190,230);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill};actions.Controls.Add(reset);actions.Controls.Add(diagnose);actions.Controls.Add(backups);actions.Controls.Add(website);main.Controls.Add(actions);main.Controls.Add(status);
+        foreach(var b in new[]{scan,analyze,reset,diagnose,backups,website})Style(b);analyze.BackColor=Accent;analyze.ForeColor=Bg;analyze.FlatAppearance.MouseOverBackColor=Color.FromArgb(163,230,255);analyze.FlatAppearance.MouseDownBackColor=Color.FromArgb(100,190,230);
         root.Text=DefaultClusterRoot();
         destinationRoot.Text=root.Text;
         install.Text=FindInstall();
         root.TextChanged+=(_,_)=>{InvalidatePlan();source.Items.Clear();};destinationRoot.TextChanged+=(_,_)=>{InvalidatePlan();target.Items.Clear();};install.TextChanged+=(_,_)=>InvalidatePlan();source.SelectedIndexChanged+=(_,_)=>InvalidatePlan();target.SelectedIndexChanged+=(_,_)=>InvalidatePlan();exclusive.CheckedChanged+=(_,_)=>reset.Enabled=!busy&&current!=null&&exclusive.Checked;online.CheckedChanged+=(_,_)=>InvalidatePlan();
-        scan.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(install.Text))install.Text=FindInstall();RefreshClusters();};analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();backups.Click+=(_,_)=>OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
+        scan.Click+=(_,_)=>{if(string.IsNullOrWhiteSpace(install.Text))install.Text=FindInstall();RefreshClusters();};analyze.Click+=async(_,_)=>await Analyze();reset.Click+=async(_,_)=>await Reset();diagnose.Click+=async(_,_)=>await Diagnose();backups.Click+=(_,_)=>OpenBackups();website.Click+=(_,_)=>Open("https://efac000.github.io/software-dedicado-/");
         FormClosing+=(_,e)=>{if(busy){e.Cancel=true;MessageBox.Show("A operação está em andamento. Aguarde a conclusão.");}};
         mode.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();RefreshMode();RefreshClusters();};
         RefreshMode();Shown+=(_,_)=>RefreshClusters();
@@ -74,7 +75,7 @@ sealed class MainForm:Form{
         candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),"Steam"));
         candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Steam"));
         candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"steamcmd"));
-        candidates.Add(@"C:steamcmd");
+        candidates.Add(@"C:\steamcmd");
         foreach(var steam in candidates.ToArray())try{var vdf=Path.Combine(steam,"steamapps","libraryfolders.vdf");if(File.Exists(vdf))foreach(Match m in Regex.Matches(File.ReadAllText(vdf),""" "path"\s+"([^"]+)" """.Trim()))candidates.Add(m.Groups[1].Value.Replace(@"\\",@"\"));}catch{}
         foreach(var library in candidates.Distinct(StringComparer.OrdinalIgnoreCase)){
             foreach(var p in new[]{Path.Combine(library,"steamapps","common","Don't Starve Together Dedicated Server"),Path.Combine(library,"dst"),Path.Combine(library,"server"),Path.Combine(library,"Don't Starve Together Dedicated Server")})try{Engine.FindExe(p);return p;}catch{}
@@ -94,7 +95,34 @@ sealed class MainForm:Form{
         busy=b;root.Enabled=destinationRoot.Enabled=install.Enabled=source.Enabled=target.Enabled=scan.Enabled=analyze.Enabled=exclusive.Enabled=online.Enabled=!b;
         // Disable path-picker buttons as well.
         foreach(Control row in Controls[0].Controls)if(row is TableLayoutPanel)row.Enabled=!b;
-        RefreshMode();reset.Enabled=!b&&current!=null&&exclusive.Checked;
+        diagnose.Enabled=!b;RefreshMode();reset.Enabled=!b&&current!=null&&exclusive.Checked;
+    }
+    async Task Diagnose(){
+        var cluster=target.SelectedItem is Cluster c?c.Path:destinationRoot.Text;
+        if(target.SelectedItem is not Cluster&&!File.Exists(Path.Combine(cluster,"cluster.ini"))){
+            using var picker=new FolderBrowserDialog{Description="Selecione a pasta do cluster a diagnosticar (mesmo incompleto)"};
+            if(Directory.Exists(cluster))picker.SelectedPath=cluster;
+            if(picker.ShowDialog(this)!=DialogResult.OK)return;cluster=picker.SelectedPath;
+        }
+        var installation=install.Text;Busy(true);
+        try{
+            status.Text="Diagnóstico em leitura...";
+            var findings=await Task.Run(()=>Diagnostics.Inspect(cluster,installation,Write));
+            using var dialog=new Form{Text="Diagnóstico do dedicado — 1.0.0",Size=new Size(1020,640),MinimumSize=new Size(650,420),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
+            var header=new Label{Dock=DockStyle.Top,Height=65,ForeColor=Accent,Text=$"{findings.Count(x=>x.Level==Severity.Error)} erros de inspeção/configuração • {findings.Count(x=>x.Level==Severity.Warning)} avisos • {findings.Count(x=>x.Level==Severity.Info)} informações\nSomente leitura. Indícios em logs podem ser históricos."};
+            var list=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
+            list.ColumnHeadersDefaultCellStyle.BackColor=Raised;list.ColumnHeadersDefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.BackColor=Bg;list.DefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.SelectionBackColor=Raised;list.DefaultCellStyle.SelectionForeColor=Accent;list.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
+            foreach(var name in new[]{"Gravidade","Local","Problema","Ação recomendada"})list.Columns.Add(name,name);
+            list.Columns[0].FillWeight=45;list.Columns[1].FillWeight=75;list.Columns[2].FillWeight=150;list.Columns[3].FillWeight=180;
+            foreach(var f in findings)list.Rows.Add(f.Level==Severity.Error?"Erro":f.Level==Severity.Warning?"Aviso":"Informação",f.Scope,f.Problem,f.Advice);
+            var controls=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};
+            var close=new Button{Text="Fechar",DialogResult=DialogResult.OK};var export=new Button{Text="Salvar relatório TXT"};Style(close);Style(export);
+            export.Click+=(_,_)=>{using var save=new SaveFileDialog{Filter="Relatório de texto (*.txt)|*.txt",FileName="Diagnostico-Dedicado.txt"};if(save.ShowDialog(dialog)==DialogResult.OK)try{
+                File.WriteAllLines(save.FileName,new[]{"Gerenciador de Dedicado 1.0.0","Diagnóstico limitado e somente leitura; sem tokens ou linhas brutas de log."}.Concat(findings.Select(f=>$"[{f.Level}] {f.Code} | {f.Scope}\n{f.Problem}\n{f.Advice}\n")),Encoding.UTF8);
+            }catch(Exception e){MessageBox.Show(dialog,e.Message,"Falha ao salvar");}};
+            controls.Controls.Add(close);controls.Controls.Add(export);dialog.Controls.Add(list);dialog.Controls.Add(header);dialog.Controls.Add(controls);dialog.ShowDialog(this);
+            status.Text="Diagnóstico concluído. Nenhuma alteração no dedicado.";
+        }catch(Exception e){Write("Diagnóstico não concluído: "+e.Message);status.Text="Diagnóstico incompleto.";}finally{Busy(false);}
     }
     async Task Analyze(){
         InvalidatePlan();

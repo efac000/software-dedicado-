@@ -122,5 +122,26 @@ try{
     Check(File.ReadAllBytes(overridePath).SequenceEqual(changed),"Edição não aplicada");
     Check(File.ReadAllText(setupFile).Contains("ServerModSetup(\"43\")"),"Setup não acompanhou edição");
     Check(File.ReadAllText(Path.Combine(save,"world"))=="save-intacto","Reparo/edição alterou save");
+    // Diagnostic must report discrepancies without touching saves, overrides or exposing tokens/log lines.
+    var diagDir=Path.Combine(root,"diagnostic","Cluster_9");
+    Directory.CreateDirectory(Path.Combine(diagDir,"Master"));Directory.CreateDirectory(Path.Combine(diagDir,"Caves"));
+    File.WriteAllText(Path.Combine(diagDir,"cluster.ini"),"[NETWORK]\noffline_cluster = false\n[SHARD]\nshard_enabled = true");
+    File.WriteAllText(Path.Combine(diagDir,"Master","server.ini"),"[NETWORK]\nserver_port = 10999\n[SHARD]\nis_master = true");
+    File.WriteAllText(Path.Combine(diagDir,"Caves","server.ini"),"[NETWORK]\nserver_port = 10999\n[SHARD]\nis_master = true");
+    var diagOverride=Path.Combine(diagDir,"Master","modoverrides.lua");
+    File.WriteAllText(diagOverride,"return { ['workshop-777']={enabled=true} }");
+    File.WriteAllText(Path.Combine(diagDir,"Master","server_log.txt"),"LUA ERROR: private-secret\nfailed to download mod\naddress already in use\nversion mismatch");
+    var originalDiag=File.ReadAllBytes(diagOverride);
+    var issues=Diagnostics.Inspect(diagDir,install);
+    foreach(var code in new[]{"TOKEN_MISSING","PORT_DUPLICATE","SHARD_ROLE","MOD_CACHE","SETUP_MISSING","SETUP_EXTRA","LOG_LUA","LOG_WORKSHOP","LOG_PORT","LOG_VERSION","OVERRIDES_MISSING"})Check(issues.Any(f=>f.Code==code),"Diagnóstico não detectou "+code);
+    Check(!string.Join("\n",issues).Contains("private-secret"),"Log privado vazou");
+    Check(File.ReadAllBytes(diagOverride).SequenceEqual(originalDiag),"Diagnóstico alterou configuração");
+    File.WriteAllText(diagOverride,"return os.execute('x')");
+    Check(Diagnostics.Inspect(diagDir,install).Any(f=>f.Code=="READ_FAILED"),"Lua inválido não detectado");
+    Check(Diagnostics.Inspect(Path.Combine(root,"inexistente"),install).Any(f=>f.Code=="CLUSTER_MISSING"),"Cluster inexistente não detectado");
+    var logPath=Path.Combine(diagDir,"Master","server_log.txt");
+    File.WriteAllText(logPath,"LUA ERROR\n"+new string('x',300000)+"\nfailed to download mod");
+    var logFindings=Diagnostics.ScanLog(logPath,"Master").ToArray();
+    Check(logFindings.Any(f=>f.Code=="LOG_WORKSHOP")&&!logFindings.Any(f=>f.Code=="LOG_LUA"),"Limite de leitura do log incorreto");
 }finally{Directory.Delete(root,true);}
 Console.WriteLine("Testes de parser, entradas, clusters, simulação e fingerprint passaram.");

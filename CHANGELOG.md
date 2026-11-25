@@ -34,3 +34,8 @@ Validação de uma instalação DST real ainda necessária.
 - Catálogo de mods por shard, filtro por nome/ID e prévia original Steam Workshop.
 - Inclusão por ID/link e ativação/desativação sem editar Lua; preserva opções existentes.
 - Primeiro mod em cluster sem modoverrides.lua, detecção adicional de caminhos e seleção direta de cluster.
+
+## Revisão de diagnóstico — 1.0.0
+- Painel somente leitura com gravidade, localização, problema e recomendação.
+- Inspeção de configuração, caches, setup, processos, disco e sinais em logs; relatório TXT sem linhas brutas.
+- Correção da detecção convencional C:\steamcmd e regressões de diagnóstico.
