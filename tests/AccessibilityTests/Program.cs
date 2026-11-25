@@ -78,7 +78,7 @@ static class AccessibilityTests{
                 Call(form,"ShowHome");Application.DoEvents();
                 var visited=new HashSet<Button>();
                 for(int i=0;i<36;i++){form.SelectNextControl(form.ActiveControl,true,true,true,true);Application.DoEvents();if(form.ActiveControl is Button b)visited.Add(b);}
-                Assert(visited.Count==12,"Tab traversal incomplete "+visited.Count);
+                Assert(visited.Count==22&&buttons.All(visited.Contains),"Tab traversal incomplete "+visited.Count);
                 Console.WriteLine("KEYBOARD_TAB_PASS "+theme);
                 var state=Field<Label>(form,"homeState");
                 Assert(state.AccessibilityObject.Name?.Contains("QA Accessibility")==true,"Status accessible name not updated");
@@ -94,7 +94,7 @@ static class AccessibilityTests{
                             var fields=Desc(dialog).ToArray();
                             var build=fields.OfType<TextBox>().Single();
                             Assert(build.ReadOnly&&build.AccessibilityObject.Name?.Contains("build")==true,"Build field not accessible");
-                            Assert(fields.OfType<Button>().Count()==5,"Feedback actions missing");
+                            Assert(fields.OfType<Button>().Count()==(SystemInformation.HighContrast?5:6),"Feedback actions missing");
                             Assert(fields.OfType<Label>().Any(l=>l.Text.Contains("públicos")&&l.Text.Contains("tokens")),"Privacy warning missing");
                             Assert(fields.OfType<Button>().All(b=>!string.IsNullOrWhiteSpace(b.AccessibilityObject.Name)),"Unnamed dialog action");
                             verified=true;
@@ -104,6 +104,30 @@ static class AccessibilityTests{
                     if(error!=null)throw error;Assert(verified,"Feedback modal not verified");
                 }
                 Console.WriteLine("FEEDBACK_MODAL_PRIVACY_AND_CANCEL_PASS "+theme);
+                if(!SystemInformation.HighContrast){
+                    var notice=FormType.GetNestedType("Notice",BindingFlags.NonPublic)!;
+                    var show=notice.GetMethod("Show",new[]{typeof(IWin32Window),typeof(string),typeof(string),typeof(MessageBoxButtons),typeof(MessageBoxIcon),typeof(MessageBoxDefaultButton)})!;
+                    foreach(var buttonsMode in new[]{MessageBoxButtons.YesNo,MessageBoxButtons.YesNoCancel}){
+                        using var timer=new System.Windows.Forms.Timer{Interval=50};
+                        Exception? error=null;bool verified=false;
+                        var defaultButton=buttonsMode==MessageBoxButtons.YesNo?MessageBoxDefaultButton.Button2:MessageBoxDefaultButton.Button3;
+                        timer.Tick+=(_,_)=>{
+                            var dialog=Application.OpenForms.Cast<Form>().FirstOrDefault(f=>f!=form);
+                            if(dialog==null)return;
+                            timer.Stop();
+                            try{
+                                Assert(dialog.FormBorderStyle==FormBorderStyle.None,"Native modal border");
+                                Assert(((Button)dialog.AcceptButton!).DialogResult==(buttonsMode==MessageBoxButtons.YesNo?DialogResult.No:DialogResult.Cancel),"Unsafe default confirmation");
+                                var close=Desc(dialog).OfType<Button>().Single(b=>b.AccessibleName=="Fechar janela");
+                                verified=true;close.PerformClick();
+                            }catch(Exception ex){error=ex;dialog.DialogResult=DialogResult.Cancel;}
+                        };
+                        timer.Start();var returned=(DialogResult)show.Invoke(null,new object[]{form,"Mensagem QA, nenhuma operação será executada.","Confirmação QA",buttonsMode,MessageBoxIcon.Warning,defaultButton})!;
+                        if(error!=null)throw error;
+                        Assert(verified&&returned==(buttonsMode==MessageBoxButtons.YesNo?DialogResult.No:DialogResult.Cancel),"Custom modal unsafe close");
+                    }
+                    Console.WriteLine("CUSTOM_MODAL_SAFE_DEFAULT_AND_CLOSE_PASS "+theme);
+                }
                 buttons.Single(b=>b.Text.StartsWith("&Gerenciar mods")).PerformClick();Application.DoEvents();
                 Assert(mainHost.Visible&&!host.Visible,"Navigation failed");
                 foreach(var name in new[]{"analyze","reset","diagnose","backups","website"})Reachable(mainHost,Field<Button>(form,name));

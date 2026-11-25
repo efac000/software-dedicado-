@@ -91,7 +91,7 @@ sealed partial class MainForm {
             if(found.Installs.Length>1||found.Clusters.Length>1||found.SteamCmd.Length>1)status.Text="Vários destinos encontrados. Use Detectar dedicado para escolher.";
             return;
         }
-        using var dialog=new Form{Text="Detecção local do dedicado",Size=new Size(940,480),MinimumSize=new Size(700,420),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
+        using var dialog=new ModernDialog{Text="Detecção local do dedicado",Size=new Size(880,500),MinimumSize=new Size(700,420),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon};
         var info=new Label{Dock=DockStyle.Top,Height=65,ForeColor=Accent,Text=SystemSummary()+"\nSelecione os destinos explicitamente. Nenhum arquivo será alterado."};
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=6,Padding=new Padding(10)};
         var installs=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=PanelColor,ForeColor=Ink};
@@ -102,18 +102,19 @@ sealed partial class MainForm {
         if(worlds.Items.Count==1)worlds.SelectedIndex=0;
         if(cli.Items.Count==1)cli.SelectedIndex=0;
         if(selectedSteamCmd!=null&&cli.Items.Contains(selectedSteamCmd))cli.SelectedItem=selectedSteamCmd;
-        foreach(var entry in new (string,Control)[]{("Instalação dedicada ("+installs.Items.Count+")",installs),("Cluster / mundo ("+worlds.Items.Count+")",worlds),("SteamCMD encontrado ("+cli.Items.Count+")",cli)}){
-            entry.Item2.AccessibleName=entry.Item1;layout.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(new Label{Text=entry.Item1,AutoSize=true});
+        foreach(var entry in new (string,Control)[]{("Instalação dedicada — "+(installs.Items.Count==0?"não localizada":installs.Items.Count+" encontrada(s)"),installs),("Mundos — "+(worlds.Items.Count==0?"nenhum localizado":worlds.Items.Count+" encontrado(s)"),worlds),("SteamCMD — "+(cli.Items.Count==0?"não localizado":cli.Items.Count+" encontrado(s)"),cli)}){
+            entry.Item2.AccessibleName=entry.Item1; if(entry.Item2 is ComboBox cb&&cb.Items.Count==0)cb.Enabled=false;layout.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(new Label{Text=entry.Item1,AutoSize=true});
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute,40));layout.Controls.Add(entry.Item2);
         }
-        var footer=new Label{Dock=DockStyle.Bottom,Height=45,ForeColor=Muted,Text="A detecção não pesquisa a unidade inteira, não executa arquivos e não lê tokens. Use Procurar para caminhos personalizados."};
+        var footer=new Label{Dock=DockStyle.Bottom,Height=55,ForeColor=Muted,Text="A detecção não pesquisa a unidade inteira, não executa arquivos e não lê tokens. Use Procurar para caminhos personalizados."};
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46,FlowDirection=FlowDirection.RightToLeft};
+        var manual=new Button{Text="Procurar manualmente"};Style(manual);manual.Click+=(_,_)=>{dialog.DialogResult=DialogResult.Retry;dialog.Close();};
         var apply=new Button{Text="Usar seleção",DialogResult=DialogResult.OK};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(apply);Style(cancel);
         apply.Enabled=installs.SelectedItem!=null||worlds.SelectedItem!=null||cli.SelectedItem!=null;
         void Update()=>apply.Enabled=installs.SelectedItem!=null||worlds.SelectedItem!=null||cli.SelectedItem!=null;
         installs.SelectedIndexChanged+=(_,_)=>Update();worlds.SelectedIndexChanged+=(_,_)=>Update();cli.SelectedIndexChanged+=(_,_)=>Update();
-        actions.Controls.AddRange(new Control[]{cancel,apply});dialog.Controls.Add(layout);dialog.Controls.Add(info);dialog.Controls.Add(footer);dialog.Controls.Add(actions);dialog.CancelButton=cancel;
-        PrepareAccessibility(dialog);if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+        actions.Controls.AddRange(new Control[]{cancel,apply,manual});dialog.Controls.Add(layout);dialog.Controls.Add(info);dialog.Controls.Add(footer);dialog.Controls.Add(actions);dialog.CancelButton=cancel;
+        PrepareAccessibility(dialog);var outcome=dialog.ShowDialog(this);if(outcome==DialogResult.Retry){OpenTask(2,false);install.Focus();return;}if(outcome!=DialogResult.OK)return;
         exclusive.Checked=false;
         if(cli.SelectedItem is string selectedCli)selectedSteamCmd=selectedCli;
         if(installs.SelectedItem is DetectedInstall selected)install.Text=selected.Path;

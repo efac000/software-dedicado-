@@ -41,7 +41,7 @@ sealed partial class MainForm{
             Location=new Point(Math.Clamp(Left,work.Left,Math.Max(work.Left,work.Right-Width)),Math.Clamp(Top,work.Top,Math.Max(work.Top,work.Bottom-Height)));
         }
         if(mainHost!=null)ResizeViewport(mainHost,mainLayout!,840,650);
-        if(homeHost!=null)ResizeViewport(homeHost,home!,760,580);
+        if(homeHost!=null)ResizeViewport(homeHost,home!,760,640);
     }
     static void SetAccessibleStatus(Label label,string value){
         label.Text=value;
@@ -63,7 +63,7 @@ sealed partial class MainForm{
         }
     }
     void ShowFeedback(){
-        using var dialog=new Form{Text="Feedback e suporte",Size=new Size(660,410),MinimumSize=new Size(460,300),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon,AutoScaleMode=AutoScaleMode.Dpi};
+        using var dialog=new ModernDialog{Text="Feedback e suporte",Size=new Size(660,410),MinimumSize=new Size(460,300),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,Icon=Icon,AutoScaleMode=AutoScaleMode.Dpi};
         var body=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoScroll=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(16)};
         var note=new Label{Text="Os relatos são públicos no GitHub. Não envie tokens Klei, chaves Steam, senhas, arquivos de mundo ou logs sem revisar. O aplicativo não anexa nem envia dados automaticamente.",AutoSize=true,MaximumSize=new Size(560,0)};
         body.Controls.Add(note);

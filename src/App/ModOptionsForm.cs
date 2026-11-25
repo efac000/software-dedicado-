@@ -8,11 +8,11 @@ sealed partial class MainForm {
         if(declared.Length>0)text=Lua.ImportDeclaredOptions(text,id,declared);
         var options=Lua.GetOptions(text,id);
         if(options.Count==0){
-            MessageBox.Show(owner,"Este mod ainda não tem opções simples gravadas neste shard.","Opções do mod",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            Notice.Show(owner,"Este mod ainda não tem opções simples gravadas neste shard.","Opções do mod",MessageBoxButtons.OK,MessageBoxIcon.Information);
             return text;
         }
 
-        using var dialog=new Form{
+        using var dialog=new ModernDialog{
             Text=$"Opções do mod {id} — {shard}",Size=new Size(640,530),MinimumSize=new Size(480,360),
             StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font,ShowInTaskbar=false,Icon=Icon
         };
@@ -79,7 +79,7 @@ sealed partial class MainForm {
                 edited=Lua.SetOptions(text,id,fields.ToDictionary(field=>field.Key,field=>field.Value(),StringComparer.Ordinal));
                 dialog.DialogResult=DialogResult.OK;
             }catch(FormatException error){
-                MessageBox.Show(dialog,error.Message,"Opção inválida",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                Notice.Show(dialog,error.Message,"Opção inválida",MessageBoxButtons.OK,MessageBoxIcon.Warning);
             }
         };
         PrepareAccessibility(dialog);return dialog.ShowDialog(owner)==DialogResult.OK?edited:initial;
