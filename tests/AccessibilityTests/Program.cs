@@ -22,7 +22,7 @@ static class AccessibilityTests{
     }
     static IEnumerable<Control> Desc(Control c)=>c.Controls.Cast<Control>().SelectMany(x=>new[]{x}.Concat(Desc(x)));
     static Form Create(string theme){
-        FormType.GetMethod("ConfigurePalette",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[theme]);
+        FormType.GetMethod("ConfigurePalette",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,null);
         var form=(Form)Activator.CreateInstance(FormType,[true])!;
         form.Show();Application.DoEvents();Call(form,"ShowHome");return form;
     }
@@ -102,7 +102,7 @@ static class AccessibilityTests{
                 File.WriteAllText(Path.Combine(world,shard,"modoverrides.lua"),"return {}");
             }
             File.WriteAllText(Path.Combine(world,"cluster.ini"),"[NETWORK]\ncluster_name = QA Accessibility");
-            foreach(var theme in new[]{"dark","light"}){
+            foreach(var theme in new[]{"dark"}){
                 using var form=Create(theme);
                 Field<TextBox>(form,"install").Text=install;
                 Field<TextBox>(form,"destinationRoot").Text=world;Call(form,"RefreshClusters");
@@ -138,15 +138,21 @@ static class AccessibilityTests{
                 Console.WriteLine("KEYBOARD_TAB_PASS "+theme);Console.WriteLine("ROUNDED_PIXEL_PERIMETER_PASS "+theme);Capture(form,"home-"+theme);
                 if(!SystemInformation.HighContrast){
                     var prior=form.BackColor;
+                    Assert(prior.GetBrightness()<0.5f,"Dark palette must be the only normal theme");
                     Call(form,"ShowPreferences");Application.DoEvents();
                     Assert(Field<Panel>(form,"internalPage").Visible&&!host.Visible&&!mainHost.Visible,"Preferences not embedded");Capture(form,"preferences-"+theme);
-                    Call(form,"ApplyLiveTheme",theme=="dark"?"light":"dark");Application.DoEvents();
-                    Assert(form.BackColor.ToArgb()!=prior.ToArgb(),"Live palette not applied");
-                    Call(form,"ApplyLiveTheme",theme);Call(form,"ShowHome");Application.DoEvents();
-                    Assert(form.BackColor.ToArgb()==prior.ToArgb()&&host.Visible,"Theme or navigation restore failed");
+                    var preferences=Field<Panel>(form,"internalPage");
+                    Assert(!Desc(preferences).OfType<ComboBox>().Any(),"Unexpected theme selector in Preferences");
+                    Assert(Desc(preferences).OfType<CheckBox>().Count()==1,"Update preference missing");
+                    Assert(Desc(preferences).OfType<Button>().Any(b=>b.Text=="Aplicar preferências"),"Apply preferences missing");
+                    Assert(FormType.GetMethod("ApplyLiveTheme",Instance)==null,"Theme switching remains available");
+                    Assert(FormType.GetMethod("ConfigurePalette",BindingFlags.Static|BindingFlags.NonPublic)!.GetParameters().Length==0,"Palette still accepts alternate theme");
+                    Call(form,"ShowHome");Application.DoEvents();
+                    Assert(form.BackColor.ToArgb()==prior.ToArgb()&&host.Visible,"Dark palette or navigation restore failed");
+                    Console.WriteLine("DARK_ONLY_PREFERENCES_PASS");
                     Call(form,"ShowSessionLog");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"History not embedded");Capture(form,"activity-"+theme);
                     Call(form,"ShowHome");Call(form,"ShowGettingStarted");Application.DoEvents();Assert(Field<Panel>(form,"internalPage").Visible,"Guide not embedded");Capture(form,"guide-"+theme);
-                    Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_PAGES_AND_LIVE_THEME_PASS "+theme);
+                    Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("EMBEDDED_PAGES_AND_FIXED_THEME_PASS "+theme);
                     Call(form,"OpenTask",2,false,null,false,"environment");
                     form.Size=new Size(1083,821);form.PerformLayout();Application.DoEvents();
                     var environmentButtons=Desc(main).OfType<Button>().Where(b=>b.Visible).ToArray();

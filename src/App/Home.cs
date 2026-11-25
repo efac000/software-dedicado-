@@ -10,19 +10,11 @@ sealed partial class MainForm{
     bool homeReady;
     bool checkUpdates;
     static Color SelectionColor=Color.FromArgb(40,68,109),WarningColor=Color.FromArgb(255,190,112),SuccessColor=Color.FromArgb(122,221,176);
-    static string ThemePreference=>Path.Combine(Path.GetDirectoryName(PreferencesPath)!,"theme.txt");
-    static string CurrentTheme(){
-        try{if(File.Exists(ThemePreference)&&new FileInfo(ThemePreference).Length<=16){var s=File.ReadAllText(ThemePreference).Trim();if(s is "dark" or "light" or "auto")return s;}}catch{}
-        return "auto";
-    }
-    internal static void ConfigurePalette(string? forced=null){
-        var theme=forced??CurrentTheme();
-        var light=theme=="light";
-        if(theme=="auto")try{light=Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","AppsUseLightTheme",0) is int value&&value==1;}catch{}
-        if(SystemInformation.HighContrast||theme=="contrast"){
+    // The product has one palette; Windows high contrast remains an accessibility override.
+    // Legacy theme.txt preferences and Windows light/dark preferences are deliberately ignored.
+    internal static void ConfigurePalette(){
+        if(SystemInformation.HighContrast){
             Bg=PanelColor=Raised=SystemColors.Window;Ink=Muted=WarningColor=SuccessColor=SystemColors.WindowText;Accent=SystemColors.Highlight;Border=SystemColors.WindowText;SelectionColor=SystemColors.Highlight;
-        }else if(light){
-            Bg=Color.FromArgb(246,248,252);PanelColor=Color.White;Raised=Color.FromArgb(224,235,247);Ink=Color.FromArgb(24,38,60);Muted=Color.FromArgb(70,86,108);Accent=Color.FromArgb(16,88,130);Border=Color.FromArgb(130,149,173);SelectionColor=Color.FromArgb(205,225,247);WarningColor=Color.FromArgb(145,71,15);SuccessColor=Color.FromArgb(18,104,64);
         }else{
             Bg=Color.FromArgb(12,17,27);PanelColor=Color.FromArgb(20,29,43);Ink=Color.FromArgb(237,244,255);Accent=Color.FromArgb(119,213,249);Border=Color.FromArgb(51,70,101);Muted=Color.FromArgb(170,187,211);Raised=Color.FromArgb(23,38,64);SelectionColor=Color.FromArgb(40,68,109);WarningColor=Color.FromArgb(255,190,112);SuccessColor=Color.FromArgb(122,221,176);
         }
