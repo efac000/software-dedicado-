@@ -36,6 +36,15 @@ static class AccessibilityTests{
             Console.WriteLine("QA_HWND="+form.Handle.ToInt64());Console.Out.Flush();
             using var timeout=new System.Windows.Forms.Timer{Interval=45000};timeout.Tick+=(_,_)=>form.Close();timeout.Start();Application.Run(form);return 0;
         }
+        var calculate=FormType.GetMethod("CalculateViewport",BindingFlags.Static|BindingFlags.NonPublic)!;
+        foreach(int dpi in new[]{96,120,144,168,192}){
+            int Scale(int n)=>(n*dpi+48)/96;
+            var minimum=new Size(Scale(840),Scale(650));
+            var small=(Size)calculate.Invoke(null,new object[]{new Size(Scale(640),Scale(420)),minimum.Width,minimum.Height,Scale(17),Scale(17)})!;
+            var large=(Size)calculate.Invoke(null,new object[]{new Size(Scale(1200),Scale(900)),minimum.Width,minimum.Height,Scale(17),Scale(17)})!;
+            Assert(small==minimum&&large==new Size(Scale(1200),Scale(900)),"Viewport calculation at DPI "+dpi);
+            Console.WriteLine("VIEWPORT_GEOMETRY_SIMULATED_DPI_PASS "+dpi);
+        }
         string fixture=Path.Combine(Path.GetTempPath(),"gdd-a11y-"+Guid.NewGuid().ToString("N"));
         try{
             Directory.CreateDirectory(fixture);
@@ -121,13 +130,25 @@ static class AccessibilityTests{
                     Assert(Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result!["Caves"])).ContainsKey("123456789")&&Lua.Active(System.Text.Encoding.UTF8.GetString(editing.Result["Master"])).Count==0,"Catalog changed wrong shard");
                     Call(form,"Busy",false);
                     var diag=(Task)Call(form,"Diagnose")!;
-                    WaitFor(()=>Field<Panel>(form,"taskPageHost")!=null,"Diagnostic did not open");
+                    WaitFor(()=>Field<Panel>(form,"taskPageHost") is Panel page&&page.Name=="task-diagnostic"&&Desc(page).OfType<DataGridView>().Any()||diag.IsCompleted,"Diagnostic did not open");
+                    Assert(!diag.IsCompleted,"Diagnostic ended before display: "+Field<TextBox>(form,"log").Text);
                     var diagnosticPage=Field<Panel>(form,"taskPageHost");
-                    Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing");
+                    Assert(Desc(diagnosticPage).OfType<DataGridView>().Any(),"Diagnostic results missing: "+Field<TextBox>(form,"log").Text);
                     Desc(diagnosticPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar do diagnóstico").PerformClick();
                     WaitFor(()=>diag.IsCompleted,"Diagnostic did not return");
                     Assert(diag.IsCompletedSuccessfully&&mainHost.Visible,"Diagnostic did not restore workspace");
-                    Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("CATALOG_SHARD_AND_DIAGNOSTIC_PASS "+theme);
+                    var backupRoot=Path.Combine(fixture,"backup-fixture");Directory.CreateDirectory(backupRoot);
+                    FormType.GetField("backupRootOverride",Instance)!.SetValue(form,backupRoot);
+                    var backupTask=(Task)Call(form,"OpenBackups")!;
+                    WaitFor(()=>Field<Panel>(form,"taskPageHost") is Panel page&&page.Name=="task-backups"||backupTask.IsCompleted,"Backups did not open");
+                    Assert(!backupTask.IsCompleted,"Backup page ended before display");
+                    var backupPage=Field<Panel>(form,"taskPageHost");
+                    Assert(Desc(backupPage).OfType<Label>().Any(l=>l.Text.Contains("Nenhum backup encontrado")),"Missing empty backup state");
+                    Desc(backupPage).OfType<Button>().Single(b=>b.AccessibleName=="Voltar dos backups").PerformClick();
+                    WaitFor(()=>backupTask.IsCompleted,"Backups did not return");
+                    Assert(backupTask.IsCompletedSuccessfully&&mainHost.Visible,"Backups did not restore workspace");
+                    FormType.GetField("backupRootOverride",Instance)!.SetValue(form,null);
+                    Call(form,"ShowHome");Application.DoEvents();Console.WriteLine("CATALOG_SHARD_DIAGNOSTIC_BACKUP_PASS "+theme);
                 }
                 var state=Field<Label>(form,"homeState");
                 Assert(state.AccessibilityObject.Name?.Contains("QA Accessibility")==true,"Status accessible name not updated");

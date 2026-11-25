@@ -137,6 +137,7 @@ sealed partial class MainForm{
         var value=busy?"Atividade recente · Operação em andamento":
             lastEvent.HasValue?$"Atividade recente · {sessionEvents} eventos nesta sessão | último às {lastEvent:HH:mm:ss}":
             "Atividade recente · Nenhuma operação nesta sessão.";
+        if(!busy&&!string.IsNullOrWhiteSpace(lastActivityMessage))value+="\n"+lastActivityMessage;
         SetAccessibleStatus(homeActivity,value);
     }
     void LoadPaths(){

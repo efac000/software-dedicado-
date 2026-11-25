@@ -8,18 +8,34 @@ sealed partial class MainForm{
     TaskCompletionSource<bool>? taskPageResult;
     Panel? taskPageHost;
     Button? taskPageCancel;
+    Label? taskPageStatus;
+    string? lastActivityMessage;
     async Task<bool> ShowTaskPage(string section,Control content,int width,int height,Button cancel){
         if(!busy||taskPageResult!=null)throw new InvalidOperationException("Área de trabalho ocupada.");
         var completion=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);taskPageResult=completion;taskPageCancel=cancel;
         HideInternalPage();homeHost!.Visible=false;mainHost!.Visible=false;
         var shell=new BufferedPanel{BackColor=Bg,ForeColor=Ink};
         var heading=new Label{Dock=DockStyle.Top,Height=LogicalToDeviceUnits(48),Padding=new Padding(16,0,0,0),Font=new Font("Segoe UI Semibold",18),ForeColor=Ink,TextAlign=ContentAlignment.MiddleLeft,Text=section switch{"mods"=>"Catálogo de mods","diagnostic"=>"Diagnóstico","backups"=>"Backups",_=>"Área de trabalho"}};
-        content.Dock=DockStyle.Fill;shell.Controls.Add(content);shell.Controls.Add(heading);
-        var viewport=CreateViewport(shell,width,height+48);taskPageHost=viewport;workspace!.Controls.Add(viewport);viewport.BringToFront();
-        try{SelectNav(section);ModernControls(content);PrepareAccessibility(content);if(SystemInformation.HighContrast)UseSystemColors(content);cancel.Focus();return await completion.Task;}
-        finally{taskPageResult=null;taskPageCancel=null;taskPageHost=null;shell.Controls.Remove(content);workspace.Controls.Remove(viewport);viewport.Dispose();mainHost.Visible=true;mainHost.BringToFront();}
+        content.Dock=DockStyle.Fill;
+        var notice=new Label{Dock=DockStyle.Bottom,Height=LogicalToDeviceUnits(32),ForeColor=Muted,BackColor=PanelColor,Padding=new Padding(10,0,10,0),TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true,AccessibleName="Estado da tarefa",Text=status.Text};
+        shell.Controls.Add(content);shell.Controls.Add(heading);shell.Controls.Add(notice);
+        var viewport=CreateViewport(shell,width,height+80);
+        viewport.Name="task-"+section;content.Name="task-content-"+section;
+        void StatusChanged(object? sender,EventArgs args)=>SetAccessibleStatus(notice,status.Text);
+        try{
+            workspace!.SuspendLayout();
+            try{workspace.Controls.Add(viewport);viewport.BringToFront();SelectNav(section);ModernControls(content);PrepareAccessibility(shell);if(SystemInformation.HighContrast)UseSystemColors(shell);}
+            finally{workspace.ResumeLayout(true);}
+            viewport.PerformLayout();shell.PerformLayout();content.PerformLayout();
+            taskPageStatus=notice;status.TextChanged+=StatusChanged;
+            taskPageHost=viewport;cancel.Focus();
+            return await completion.Task;
+        }finally{
+            status.TextChanged-=StatusChanged;taskPageStatus=null;taskPageResult=null;taskPageCancel=null;taskPageHost=null;
+            shell.Controls.Remove(content);workspace?.Controls.Remove(viewport);viewport.Dispose();mainHost.Visible=true;mainHost.BringToFront();
+        }
     }
-    void FinishTaskPage(bool accepted){taskPageResult?.TrySetResult(accepted);}
+    void FinishTaskPage(bool accepted){if(taskPageResult?.TrySetResult(accepted)==true&&taskPageHost!=null)taskPageHost.Enabled=false;}
     protected override bool ProcessCmdKey(ref Message msg,Keys keyData){
         if(keyData==Keys.Escape&&taskPageCancel is {Enabled:true,Visible:true}){taskPageCancel.PerformClick();return true;}
         return base.ProcessCmdKey(ref msg,keyData);

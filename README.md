@@ -97,3 +97,5 @@ Preferências, registro e primeiros passos passam a páginas internas, com aplic
 A moldura utiliza cores DWM quando suportadas pelo Windows, preservando botões de sistema, Snap, redimensionamento e alto contraste. As consultas de metadados foram deslocadas da thread visual; tabelas usam double buffering. A migração integral WPF não foi realizada nesta revisão. As versões dos componentes GitHub Actions foram atualizadas; homologar todos os workflows antes da publicação.
 
 O guia inicial aparece automaticamente quando ainda não foi aberto e nenhum mundo foi selecionado. O catálogo permite cancelar a consulta de metadados sem gravar alterações, inclusive durante requisições online. Testes em fixture validam separação de Master/Caves e retorno do diagnóstico.
+
+A área de tarefas exibe avisos de estado sem janelas extras, e a tela inicial mostra o último estado da atividade. O cálculo da geometria dos viewports é testado em 96/120/144/168/192 DPI simulados; isso não substitui execução em telas de DPI real. O teste de backups utiliza uma pasta temporária vazia, sem tocar nos backups do usuário.

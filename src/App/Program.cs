@@ -267,7 +267,7 @@ sealed partial class MainForm:Form{
         // Disable path-picker buttons as well.
         foreach(Control row in mainLayout!.Controls)if(row is TableLayoutPanel)row.Enabled=!b;
         diagnose.Enabled=backups.Enabled=!b;activity.Visible=b;foreach(var button in navButtons)button.Enabled=!b;RefreshMode();if(!b)RefreshRecoveryNotice();else UpdateActions();RefreshHome();
-        if(ended&&!smokeMode)RecordActivity();
+        if(ended){lastActivityMessage=status.Text;RefreshActivity();if(!smokeMode)RecordActivity();}
     }
     async Task Diagnose(){
         var cluster=target.SelectedItem is Cluster c?c.Path:destinationRoot.Text;
@@ -280,6 +280,7 @@ sealed partial class MainForm:Form{
         try{
             status.Text="Diagnóstico em leitura...";
             var findings=await Task.Run(()=>Diagnostics.Inspect(cluster,installation,Write));
+            status.Text=$"Diagnóstico: {findings.Length} ocorrências. Inspeção somente leitura." ;
             using var dialog=new BufferedPanel{BackColor=Bg,ForeColor=Ink,Padding=new Padding(20,12,20,12)};
             var header=new BufferedTable{Dock=DockStyle.Top,Height=100,ColumnCount=3,RowCount=2,Padding=new Padding(0,6,0,0)};
             for(int i=0;i<3;i++)header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3));
@@ -508,6 +509,7 @@ sealed partial class MainForm:Form{
         chart.Paint+=(_,e)=>{if(chart.Tag is ValueTuple<int,int> counts&&counts.Item2>0){int width=(int)((long)chart.Width*counts.Item1/counts.Item2);using var fill=new SolidBrush(Accent);if(width>0)e.Graphics.FillRectangle(fill,0,0,width,chart.Height);}};
         cancel.Click+=(_,_)=>{lifetime.Cancel();FinishTaskPage(false);};
         Populate();UpdateCatalogActions();
+        status.Text="Catálogo: alterações apenas em memória. Revise ou cancele.";
         var pending=ShowTaskPage("mods",dialog,840,590,cancel);
         _=Lookup();
         try{return await pending?result:null;}
@@ -570,9 +572,10 @@ sealed partial class MainForm:Form{
         Busy(true);try{status.Text="Aplicando plano aprovado (backup, caches e atualização dos shards)";var result=await Task.Run(()=>Engine.Apply(p,Write));Write("Atualizadores concluídos. Backup: "+result);Write("Confira os logs e teste a entrada no mundo e nas cavernas. Não reiniciamos o servidor.");status.Text="Manutenção concluída; validação do mundo pendente.";}catch(Exception e){Write(e.Message);status.Text="Falha: leia o relatório antes de iniciar o mundo.";}finally{current=null;Busy(false);}
     }
     static void Open(string url){try{Process.Start(new ProcessStartInfo(url){UseShellExecute=true});}catch(Exception e){Notice.Show(e.Message);}}
+    string? backupRootOverride;
     async Task OpenBackups(){
         if(busy)return;
-        var rootPath=Recovery.DefaultRoot;Directory.CreateDirectory(rootPath);
+        var rootPath=backupRootOverride??Recovery.DefaultRoot;Directory.CreateDirectory(rootPath);
         try{if(InterruptedMaintenance.Pending(rootPath).Length>0){await RecoverInterrupted(rootPath);return;}}catch(Exception ex){Write("Recuperação: "+ex.Message);return;}
         using var dialog=new BufferedPanel{BackColor=Bg,ForeColor=Ink,Padding=new Padding(20,12,20,12)};
         var hint=new Label{Dock=DockStyle.Top,Height=82,ForeColor=Muted,Text="Recupere configurações de mods de backups com manifesto de integridade. Selecione primeiro o mesmo cluster e instalação na janela principal. Saves, tokens e server.ini atuais NÃO serão restaurados. Backups antigos podem ser abertos na pasta."};
@@ -586,7 +589,7 @@ sealed partial class MainForm:Form{
         prepare.Click+=(_,_)=>FinishTaskPage(true);close.Click+=(_,_)=>FinishTaskPage(false);
         actions.Controls.Add(close);actions.Controls.Add(prepare);actions.Controls.Add(folder);
         if(list.Items.Count==0){dialog.Controls.Add(new Label{Dock=DockStyle.Fill,Text="Nenhum backup encontrado."+Environment.NewLine+"Os backups de configuração são criados durante operações de manutenção.",TextAlign=ContentAlignment.MiddleCenter,ForeColor=Muted,BackColor=PanelColor,AccessibleName="Nenhum backup encontrado"});}else dialog.Controls.Add(list);dialog.Controls.Add(hint);dialog.Controls.Add(actions);
-        bool accepted;Busy(true);try{accepted=await ShowTaskPage("backups",dialog,700,420,close);}finally{Busy(false);}
+        bool accepted;Busy(true);status.Text="Backups: selecione uma configuração para preparar a recuperação.";try{accepted=await ShowTaskPage("backups",dialog,700,420,close);}finally{Busy(false);}
         if(!accepted||list.SelectedItem is not string backup||target.SelectedItem is not Cluster chosen)return;
         var installation=install.Text;var lookup=online.Checked;
         mode.SelectedIndex=1;destinationRoot.Text=chosen.Path;RefreshClusters();
