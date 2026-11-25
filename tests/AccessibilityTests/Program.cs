@@ -38,21 +38,23 @@ static class AccessibilityTests{
         Assert(button.FlatAppearance.BorderSize==0,"Native square border: "+button.Text);
         Assert(button.GetType().Name=="ModernButton","Native paint adapter still present: "+button.Text);
         Assert(button.Region==null,"Native clip may leave unpainted pixels: "+button.Text);
-        using var image=new Bitmap(button.Width,button.Height);
+        // WM_PRINT draws via GDI and may not set the alpha channel. Compare opaque RGB.
+        using var image=new Bitmap(button.Width,button.Height,System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+        using(var canvas=Graphics.FromImage(image))canvas.Clear(Color.Magenta);
         button.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size));
-        var expected=button.Parent!.BackColor.ToArgb();
-        // A one-pixel perimeter must be entirely identical to the surrounding surface.
-        // This detects faint rectangular halos that a geometric region test cannot detect.
-        for(int x=0;x<image.Width;x++){
-            Assert(image.GetPixel(x,0).ToArgb()==expected,"Top halo: "+button.Text+" at "+x);
-            Assert(image.GetPixel(x,image.Height-1).ToArgb()==expected,"Bottom halo: "+button.Text+" at "+x);
+        var expected=button.Parent!.BackColor.ToArgb()&0xffffff;
+        int Rgb(int x,int y)=>image.GetPixel(x,y).ToArgb()&0xffffff;
+        void Match(int x,int y,string edge){
+            int actual=Rgb(x,y);
+            if(actual==expected)return;
+            var folder=Environment.GetEnvironmentVariable("GDD_QA_CAPTURE_DIR");
+            if(!string.IsNullOrWhiteSpace(folder)){Directory.CreateDirectory(folder);image.Save(Path.Combine(folder,"failed-button.png"),System.Drawing.Imaging.ImageFormat.Png);}
+            throw new Exception($"{edge} halo: {button.Text} at {x},{y}; expected #{expected:X6}, actual #{actual:X6}");
         }
-        for(int y=0;y<image.Height;y++){
-            Assert(image.GetPixel(0,y).ToArgb()==expected,"Left halo: "+button.Text+" at "+y);
-            Assert(image.GetPixel(image.Width-1,y).ToArgb()==expected,"Right halo: "+button.Text+" at "+y);
-        }
+        for(int x=0;x<image.Width;x++){Match(x,0,"Top");Match(x,image.Height-1,"Bottom");}
+        for(int y=0;y<image.Height;y++){Match(0,y,"Left");Match(image.Width-1,y,"Right");}
         int inset=Math.Max(1,button.LogicalToDeviceUnits(3));
-        Assert(image.GetPixel(image.Width/2,inset).ToArgb()!=expected,"Missing rounded border: "+button.Text);
+        Assert(Rgb(image.Width/2,inset)!=expected,"Missing rounded border: "+button.Text);
     }
     static void Reachable(Panel host,Control c){
         Assert(c.Visible&&c.Width>0&&c.Height>0,"Missing control "+c.Name+" "+c.Text);
