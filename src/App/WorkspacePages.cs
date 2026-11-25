@@ -110,9 +110,20 @@ sealed partial class MainForm{
         save.Click+=(_,_)=>{SavePaths();message.Text=homeHint!.Text;};forget.Click+=(_,_)=>{ForgetPaths();message.Text=homeHint!.Text;};
         var apply=new ModernButton{Text="Aplicar preferências"};Style(apply);
         apply.Click+=(_,_)=>{
-            checkUpdates=auto.Checked;SaveUpdatePreference(checkUpdates);
-            try{var selected=new[]{"auto","dark","light"}[theme.SelectedIndex];Directory.CreateDirectory(Path.GetDirectoryName(ThemePreference)!);File.WriteAllText(ThemePreference,selected);ApplyLiveTheme(selected);message.Text="Preferências aplicadas.";}
-            catch{message.Text="Não foi possível salvar o tema.";}
+            bool updateSaved=TrySaveUpdatePreference(UpdatePreference,auto.Checked);
+            if(updateSaved)checkUpdates=auto.Checked;
+            else auto.Checked=checkUpdates;
+            bool themeSaved=false;
+            try{
+                var selected=new[]{"auto","dark","light"}[theme.SelectedIndex];
+                WritePreferenceAtomically(ThemePreference,selected);ApplyLiveTheme(selected);themeSaved=true;
+            }catch{theme.SelectedIndex=CurrentTheme() switch{"dark"=>1,"light"=>2,_=>0};}
+            message.Text=(updateSaved,themeSaved) switch{
+                (true,true)=>"Preferências aplicadas.",
+                (false,true)=>"Tema aplicado. Não foi possível salvar a consulta de atualizações; a opção anterior foi mantida.",
+                (true,false)=>"Consulta de atualizações salva. Não foi possível aplicar o tema.",
+                _=>"Não foi possível salvar as preferências. Confira as permissões e tente novamente."
+            };
         };
         var back=new ModernButton{Text="Voltar ao início"};Style(back);back.Click+=(_,_)=>ShowHome();
         var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true};actions.Controls.AddRange(new Control[]{apply,back});

@@ -8,7 +8,7 @@ A release estável e o download oficial não devem ser substituídos antes dos g
 | Segurança | Edição isolada por shard, diagnóstico somente leitura, backup e duas confirmações preservados |
 | Visual | Revisar artefato UI-review-fixture, temas claro/escuro e estado vazio |
 | DPI | Geometria simulada 96/120/144/168/192; validar também DPI real no Windows |
-| Tecnologia assistiva | Narrador/NVDA: navegação, nomes, leitura dos estados e retorno de foco |
+| Tecnologia assistiva | Navegação, contraste e UI Automation mantidos; teste específico Narrador/NVDA dispensado pelo responsável pelo projeto |
 | Online | Servidor descartável exclusivo e desligado durante manutenção, chave Steam opcional e token Klei fornecidos localmente, sem registro dos segredos |
 | Distribuição | SHA-256 dos três executáveis, publicação como candidata, revisão de downloads, só então promover a estável |
 

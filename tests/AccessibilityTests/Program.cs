@@ -82,6 +82,17 @@ static class AccessibilityTests{
         string fixture=Path.Combine(Path.GetTempPath(),"gdd-a11y-"+Guid.NewGuid().ToString("N"));
         try{
             Directory.CreateDirectory(fixture);
+            var savePreference=FormType.GetMethod("TrySaveUpdatePreference",BindingFlags.Static|BindingFlags.NonPublic)!;
+            var preference=Path.Combine(fixture,"preferences","check-updates.txt");
+            bool Save(string path,bool value)=>(bool)savePreference.Invoke(null,new object[]{path,value})!;
+            Assert(Save(preference,true)&&File.ReadAllText(preference)=="true","Preference enable failed");
+            Assert(Save(preference,false)&&!File.Exists(preference),"Preference disable failed");
+            Assert(Save(preference,false),"Preference disable not idempotent");
+            var blocked=Path.Combine(fixture,"blocked");File.WriteAllText(blocked,"preserve");
+            Assert(!Save(Path.Combine(blocked,"check-updates.txt"),true),"Failed preference incorrectly reported success");
+            Assert(!Save(Path.GetDirectoryName(preference)!,false),"Directory deletion incorrectly reported success");
+            Assert(File.ReadAllText(blocked)=="preserve","Failed preference changed unrelated file");
+            Console.WriteLine("PREFERENCE_STORAGE_PASS");
             var world=Path.Combine(fixture,"Mundo QA");var install=Path.Combine(fixture,"dedicated");
             Directory.CreateDirectory(install);
             File.WriteAllText(Path.Combine(fixture,"marker.txt"),"original");
