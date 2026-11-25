@@ -4,6 +4,13 @@ Aplicativo independente para Windows x64, x86 e ARM64 e servidores dedicados de 
 
 **Estado:** candidato a validação. Teste em um cluster descartável; não use em produção sem backup externo e teste real. A versão pública permanece 1.0.0; a revisão é identificada pelo commit e pelo número de build.
 
+## Modos de manutenção
+- **Reinstalar mods deste dedicado:** usa os próprios arquivos Master/Caves como referência; preserva as opções e não exige outro mundo.
+- **Copiar configuração:** transfere as configurações de um mundo de referência para o dedicado.
+- **Editar configurações e reinstalar:** editor Lua literal por shard, com validação sem executar Lua. Adicione entradas Workshop, altere opções ou desative mods. A análise e duas confirmações precedem qualquer escrita.
+- O programa bloqueia listas totalmente vazias, coleções Workshop, configurações globais com mods não relacionados e instalações compartilhadas. Logs do atualizador ficam em arquivos separados de saída e erro no backup.
+- A conexão Steam/Workshop continua necessária para baixar mods; testar a entrada no mundo após manutenção continua indispensável.
+
 ## Uso
 1. No DST, crie e gere um mundo temporário com os mods de servidor desejados. Salve e feche o jogo. Desligue os shards e qualquer reinício automático do servidor.
 2. Abra o aplicativo. Confira as pastas de origem, destino e instalação do dedicado (subpastas numéricas de contas são pesquisadas); selecione os clusters de origem e destino (números inteiros existentes).

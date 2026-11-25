@@ -23,3 +23,9 @@
 - CI Windows, publicação candidata por GitHub Releases e site de download integrado.
 
 Validação de uma instalação DST real ainda necessária.
+
+## Revisão de manutenção — 1.0.0
+- Reparo/reinstalação no próprio cluster, sem mundo temporário.
+- Editor literal Master/Caves com revisão e confirmação; detecção de alterações concorrentes.
+- Consulta local de nomes em caches V1 e V2; logs do atualizador gravados em fluxo.
+- Proteção do setup global contra registros externos ao plano.
