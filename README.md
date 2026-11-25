@@ -8,11 +8,11 @@ Aplicativo independente para Windows x64, x86 e ARM64 e servidores dedicados de 
 - **Reinstalar mods deste dedicado:** usa os próprios arquivos Master/Caves como referência; preserva as opções e não exige outro mundo.
 - **Copiar configuração:** transfere as configurações de um mundo de referência para o dedicado.
 - **Editar configurações e reinstalar:** editor Lua literal por shard, com validação sem executar Lua. Adicione entradas Workshop, altere opções ou desative mods. A análise e duas confirmações precedem qualquer escrita.
-- O programa bloqueia listas totalmente vazias, coleções Workshop, configurações globais com mods não relacionados e instalações compartilhadas. Logs do atualizador ficam em arquivos separados de saída e erro no backup.
+- A desativação integral exige edição explícita e confirmação reforçada. O programa bloqueia coleções Workshop, configurações globais com mods não relacionados e instalações compartilhadas. Logs do atualizador ficam em arquivos separados de saída e erro no backup.
 - A conexão Steam/Workshop continua necessária para baixar mods; testar a entrada no mundo após manutenção continua indispensável.
 
 ## Uso
-1. No DST, crie e gere um mundo temporário com os mods de servidor desejados. Salve e feche o jogo. Desligue os shards e qualquer reinício automático do servidor.
+1. Escolha o próprio dedicado para gerenciar ou reparar mods. Um mundo temporário é opcional e só é necessário quando você deseja copiar uma configuração de referência. Desligue o jogo, os shards e qualquer reinício automático do servidor.
 2. Abra o aplicativo. Confira as pastas de origem, destino e instalação do dedicado (subpastas numéricas de contas são pesquisadas); selecione os clusters de origem e destino (números inteiros existentes).
 3. Analise o plano, consulte nomes/IDs e confira Master/Caves. Confirme a origem e, depois, digite RESET Cluster_N para o destino.
 4. Somente em instalação exclusiva, sem UGC personalizado, autorize a manutenção. O programa copia o cluster inteiro para backup local, preserva configurações e coloca caches antigos dos IDs afetados e UGC do destino em quarentena. A presença de caches UGC de outros clusters bloqueia a operação. Atualiza os shards sequencialmente sem iniciar o mundo; verifique logs e teste o servidor antes de liberar jogadores.
@@ -48,3 +48,6 @@ O botão Diagnóstico do dedicado inspeciona o cluster selecionado (ou uma pasta
 
 ### Operações assistidas
 No diagnóstico, filtre por gravidade, nome, ID ou descrição. Selecione um aviso de cache/setup/download para preparar a reinstalação ou um indício de Lua para abrir o catálogo visual. Erros de inspeção, instalação compartilhada, setup extra, processos ativos, espaço baixo e clusters não suportados bloqueiam os atalhos. O botão nunca executa a manutenção; uma nova análise, instalação exclusiva, duas confirmações e backup continuam obrigatórios. Antes de copiar o backup, calcula-se o tamanho do cluster e verifica-se a unidade de destino com reserva mínima de 64 MiB ou 5%. Downloads podem exigir espaço adicional. Relatórios são criados sem sobrescrever arquivos existentes.
+
+## Central de backups
+Novos backups incluem um manifesto local das configurações de mods, com caminho exato do cluster e instalação, shards e hashes dos arquivos. A central prepara a recuperação por meio do motor de manutenção existente, com nova análise e duas confirmações. Não reverte saves, tokens, server.ini ou o binário do dedicado; os mods da configuração antiga são baixados novamente quando disponíveis. Um override originalmente ausente é representado como tabela vazia. Backups antigos sem manifesto continuam acessíveis pela pasta, sem restauração automática. A desativação de todos os mods exige confirmação DESATIVAR TODOS Cluster_N; nenhum download é iniciado nesse caso. A remoção pode afetar entidades ao iniciar o mundo.

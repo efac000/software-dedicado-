@@ -122,7 +122,7 @@ public static class Engine {
             return new ShardPlan(s,wanted,Ids(wanted),previous is null?[]:Ids(previous));
         }).ToArray();
 
-        if(!allowEmpty&&!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado; remoção integral não suportada.");
+        if(!allowEmpty&&proposed==null&&!shards.Any(x=>x.Wanted.Length>0))throw new ArgumentException("Nenhum mod ativo encontrado; use o catálogo para editar a lista.");
         CheckSetup(setupBytes,shards.SelectMany(s=>s.Old.Concat(s.Wanted)).ToHashSet(StringComparer.Ordinal));
         var baseline=Hash(Utf8.GetBytes(System.Text.Json.JsonSerializer.Serialize(fingerprintParts)));
         if(expectedBaseline!=null&&baseline!=expectedBaseline)throw new IOException("Arquivos mudaram durante a edição; analise novamente.");
@@ -193,6 +193,7 @@ public static class Engine {
         // Snapshot every changed file and full destination before any mutation.
         CheckBackupSpace(target.Path,setup,backup);
         Directory.CreateDirectory(backup);log("Backup: "+backup);CopyTree(target.Path,System.IO.Path.Combine(backup,"cluster"));
+        Recovery.Record(backup,plan);
         var originals=new Dictionary<string,byte[]?>();foreach(var p in plan.Shards.Select(s=>Override(target,s.Name)).Append(setup)){SafePath(p);originals[p]=File.Exists(p)?File.ReadAllBytes(p):null;}
         if(originals[setup] is byte[] old)Atomic(System.IO.Path.Combine(backup,"dedicated_server_mods_setup.lua"),old);
         Directory.CreateDirectory(quarantine);
@@ -209,6 +210,7 @@ public static class Engine {
             touched.Add(setup);Atomic(setup,Utf8.GetBytes("-- Gerenciador de Dedicado 1.0.0\n"+string.Join("\n",plan.Ids.Select(x=>"ServerModSetup(\""+x+"\")"))+"\n"));
             foreach(var s in plan.Shards.OrderBy(s=>s.Name=="Master"?0:1)){
                 offline();var ugcShard=Path.Combine(ugc,s.Name);SafePath(ugcShard);
+                if(s.Wanted.Length==0&&plan.Ids.Length==0){log("Nenhum mod ativo: download dispensado em "+s.Name+".");continue;}
                 update(plan,s,ugcShard,backup,log);
                 foreach(var mod in s.Wanted){
                     var v1=Path.Combine(mods,"workshop-"+mod);
