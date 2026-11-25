@@ -49,3 +49,6 @@ Validação de uma instalação DST real ainda necessária.
 - Central de backups e recuperação verificada das configurações de mods sem reverter saves.
 - Manifesto SHA-256 com vínculo ao cluster e à instalação; proteção contra backup divergente.
 - Desativação integral explícita, confirmação reforçada e dispensa de downloads quando não há mods ativos.
+
+## Revisão de atualização do dedicado — 1.0.0
+- Atualizador SteamCMD integrado para instalações independentes, validação opcional, confirmação dupla, backup e proteção das configurações de mods.

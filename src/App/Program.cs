@@ -11,7 +11,7 @@ static class Program {
         ApplicationConfiguration.Initialize();Application.Run(new MainForm());return 0;
     }
 }
-sealed class MainForm:Form{
+sealed partial class MainForm:Form{
     static readonly Color Bg=Color.FromArgb(9,15,30), PanelColor=Color.FromArgb(16,27,48), Ink=Color.FromArgb(237,244,255), Accent=Color.FromArgb(119,213,249), Border=Color.FromArgb(51,70,101), Muted=Color.FromArgb(170,187,211), Raised=Color.FromArgb(23,38,64);
     readonly TextBox root=new(),destinationRoot=new(),install=new(),log=new(){Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical};
     readonly ComboBox source=new(){DropDownStyle=ComboBoxStyle.DropDownList},target=new(){DropDownStyle=ComboBoxStyle.DropDownList};
@@ -30,7 +30,10 @@ sealed class MainForm:Form{
         main.RowStyles.Add(new RowStyle(SizeType.Absolute,70));main.RowStyles.Add(new RowStyle(SizeType.Absolute,42));main.RowStyles.Add(new RowStyle(SizeType.Absolute,45));main.RowStyles.Add(new RowStyle(SizeType.Absolute,45));main.RowStyles.Add(new RowStyle(SizeType.Absolute,45));main.RowStyles.Add(new RowStyle(SizeType.Absolute,45));main.RowStyles.Add(new RowStyle(SizeType.Absolute,37));main.RowStyles.Add(new RowStyle(SizeType.Percent,62));main.RowStyles.Add(new RowStyle(SizeType.Absolute,40));main.RowStyles.Add(new RowStyle(SizeType.Percent,38));main.RowStyles.Add(new RowStyle(SizeType.Absolute,38));main.RowStyles.Add(new RowStyle(SizeType.Absolute,35));
         Controls.Add(main);
         var heading=new Label{Text="Gerenciador de Dedicado\n1.0.0  •  Don't Starve Together  /  Windows",Dock=DockStyle.Fill,Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Accent};
-        main.Controls.Add(heading);
+        var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2};
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var updater=new Button{Text="Atualizar dedicado",Anchor=AnchorStyles.Right};Style(updater);updater.Click+=async(_,_)=>await UpdateDedicated();
+        top.Controls.Add(heading);top.Controls.Add(updater);main.Controls.Add(top);
         mode.Items.AddRange(new object[]{"Copiar configuração de outro mundo","Reinstalar mods deste dedicado (sem mudar opções)","Gerenciar mods visualmente","Editar Lua (avançado)"});
         mode.BackColor=PanelColor;mode.ForeColor=Ink;mode.FlatStyle=FlatStyle.Flat;mode.AccessibleName="Modo de manutenção";mode.SelectedIndex=2;
         main.Controls.Add(mode);
