@@ -161,7 +161,7 @@ public static class Engine {
         try{File.WriteAllBytes(tmp,data);File.Move(tmp,path,true);}finally{if(File.Exists(tmp))File.Delete(tmp);}
         if(FileHash(path)!=Hash(data))throw new IOException("Falha na conferência de "+path);
     }
-    static void SafeTree(string path){SafePath(path);foreach(var f in Directory.GetFiles(path))SafePath(f);foreach(var d in Directory.GetDirectories(path))SafeTree(d);}
+    internal static void SafeTree(string path){SafePath(path);foreach(var f in Directory.GetFiles(path))SafePath(f);foreach(var d in Directory.GetDirectories(path))SafeTree(d);}
     public static Task<string> Apply(Plan plan,Action<string> log){
         using var gate=new Mutex(false,"Local\\GerenciadorDeDedicadoReset");
         if(!gate.WaitOne(0))throw new IOException("Outra manutenção em andamento.");
@@ -169,7 +169,7 @@ public static class Engine {
         try{return Task.FromResult(Run(plan,log,Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Gerenciador de Dedicado","Backups"),Offline,UpdateShard));}finally{gate.ReleaseMutex();}
     }
     internal static string Run(Plan plan,Action<string> log,string backupBase,Action offline,Action<Plan,ShardPlan,string,string,Action<string>> update){
-        offline();
+        offline();InterruptedMaintenance.EnsureClear(backupBase);
         var source=Load(System.IO.Path.GetDirectoryName(plan.Source.Path)!,plan.Source.Number);
         var target=Load(System.IO.Path.GetDirectoryName(plan.Target.Path)!,plan.Target.Number);
         Plan Reanalyze(Plan p,Cluster a,Cluster b)=>p.InPlace?AnalyzeRepair(b,p.Install,p.Edited?p.Shards.ToDictionary(s=>s.Name,s=>s.Content):null):Analyze(a,b,p.Install);
@@ -204,10 +204,12 @@ public static class Engine {
         offline();
         if(Reanalyze(plan,Load(Path.GetDirectoryName(source.Path)!,source.Number),Load(Path.GetDirectoryName(target.Path)!,target.Number)).Fingerprint!=plan.Fingerprint)throw new IOException("Arquivos mudaram durante o backup; nenhuma manutenção executada.");
         var newPaths=affected.Select(x=>Path.Combine(mods,"workshop-"+x)).Concat(target.Shards.Select(s=>Path.Combine(ugc,s))).Where(p=>!Directory.Exists(p)).ToArray();
+        var nextSetup=Utf8.GetBytes("-- Gerenciador de Dedicado 1.0.0\n"+string.Join("\n",plan.Ids.Select(x=>"ServerModSetup(\""+x+"\")"))+"\n");
+        InterruptedMaintenance.Begin(backup,plan,originals,nextSetup,caches,newPaths);
         try{
             foreach(var p in caches){var q=System.IO.Path.Combine(quarantine,moved.Count.ToString());Directory.Move(p,q);moved.Add((p,q));}
             foreach(var s in plan.Shards){var p=Override(target,s.Name);if(originals[p] is byte[] oldBytes&&oldBytes.AsSpan().SequenceEqual(s.Content))continue;touched.Add(p);Atomic(p,s.Content);}
-            touched.Add(setup);Atomic(setup,Utf8.GetBytes("-- Gerenciador de Dedicado 1.0.0\n"+string.Join("\n",plan.Ids.Select(x=>"ServerModSetup(\""+x+"\")"))+"\n"));
+            touched.Add(setup);Atomic(setup,nextSetup);
             foreach(var s in plan.Shards.OrderBy(s=>s.Name=="Master"?0:1)){
                 offline();var ugcShard=Path.Combine(ugc,s.Name);SafePath(ugcShard);
                 if(s.Wanted.Length==0&&plan.Ids.Length==0){log("Nenhum mod ativo: download dispensado em "+s.Name+".");continue;}
@@ -220,6 +222,7 @@ public static class Engine {
                 }
             }
             File.AppendAllText(journal,"\nAtualizadores concluídos; confirme logs e teste mundo manualmente.");
+            InterruptedMaintenance.Complete(backup,"completed");
             return backup;
         }catch(Exception error){
             log("Falha: "+error.Message+"; tentando restaurar.");
@@ -229,6 +232,7 @@ public static class Engine {
             foreach(var p in newPaths)try{if(Directory.Exists(p)){SafeTree(p);Directory.Move(p,Path.Combine(quarantine,"novo-"+Guid.NewGuid().ToString("N")));}}catch(Exception ex){rollbackErrors.Add(p+": "+ex.Message);}
             foreach(var (p,q) in moved.AsEnumerable().Reverse())try{if(Directory.Exists(p)){SafeTree(p);Directory.Move(p,System.IO.Path.Combine(quarantine,"novo-"+Guid.NewGuid().ToString("N")));}Directory.Move(q,p);}catch(Exception ex){rollbackErrors.Add(p+": "+ex.Message);}
             File.AppendAllText(journal,"\nFalha: "+error.Message+"\n"+string.Join("\n",rollbackErrors));
+            if(rollbackErrors.Count==0)InterruptedMaintenance.Complete(backup,"rolledback");
             throw new IOException("Manutenção interrompida. "+(rollbackErrors.Count==0?"Configurações e caches afetados foram restaurados; verifique o relatório e o mundo antes de iniciar.":"Restauração incompleta; consulte recovery.txt.")+" Backup: "+backup,error);
         }
     }

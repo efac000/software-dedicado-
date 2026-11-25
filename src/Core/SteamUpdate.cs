@@ -33,7 +33,7 @@ public static class SteamUpdate {
         finally{gate.ReleaseMutex();}
     }
     internal static string Run(string steamcmd,Cluster target,string install,bool validate,string backupRoot,Action offline,Action<string,string,bool,string> execute,Action<string> log){
-        offline();Check(steamcmd,target,install);
+        offline();InterruptedMaintenance.EnsureClear(backupRoot);Check(steamcmd,target,install);
         var fresh=Engine.Load(Path.GetDirectoryName(target.Path)!,target.Number);
         if(!fresh.Path.Equals(target.Path,StringComparison.OrdinalIgnoreCase))throw new IOException("Cluster alterado.");
         var backup=Path.Combine(backupRoot,"steamcmd-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8]);
