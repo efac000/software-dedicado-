@@ -8,7 +8,8 @@ sealed partial class MainForm{
     // The vector paths are original line drawings, rendered locally, not downloaded.
     static string ButtonIcon(string text){
         var t=text.Replace("&","").ToLowerInvariant();
-        if(t.Contains("início"))return "home";
+        if(t.Contains("início")||t.Contains("voltar"))return "home";
+        if(t.Contains("primeiros passos")||t.Contains("como usar"))return "info";
         if(t.Contains("feedback")||t.Contains("sugerir")||t.Contains("relatar"))return "chat";
         if(t.Contains("backup")||t.Contains("recuper"))return "archive";
         if(t.Contains("diagn"))return "pulse";
@@ -60,43 +61,70 @@ sealed partial class MainForm{
         if(d<=0){path.AddRectangle(r);return path;}
         path.AddArc(r.X,r.Y,d,d,180,90);path.AddArc(r.Right-d,r.Y,d,d,270,90);path.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);path.AddArc(r.X,r.Bottom-d,d,d,90,90);path.CloseFigure();return path;
     }
+    // Preserve Button keyboard, dialog and accessibility behavior, but own the entire paint pass.
+    sealed class ModernButton:Button{
+        public Action<PaintEventArgs>? RenderSurface;
+        public ModernButton(){SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);}
+        protected override void OnPaintBackground(PaintEventArgs e){
+            if(RenderSurface==null||SystemInformation.HighContrast){base.OnPaintBackground(e);return;}
+            using var fill=new SolidBrush(Parent?.BackColor??Bg);e.Graphics.FillRectangle(fill,ClientRectangle);
+        }
+        protected override void OnPaint(PaintEventArgs e){
+            if(RenderSurface==null||SystemInformation.HighContrast){base.OnPaint(e);return;}
+            RenderSurface(e);
+        }
+        protected override void OnParentChanged(EventArgs e){base.OnParentChanged(e);Invalidate();}
+        protected override void OnDpiChangedAfterParent(EventArgs e){base.OnDpiChangedAfterParent(e);Invalidate();}
+    }
     static void DecorateButton(Button b,bool card=false,string? icon=null,bool compact=false){
         if(SystemInformation.HighContrast)return;
         var kind=icon??ButtonIcon(b.Text);
+        // The native flat adapter must not draw a second, rectangular outline.
+        b.FlatAppearance.BorderSize=0;
+        b.UseVisualStyleBackColor=false;
+        if(b is not ModernButton surface)throw new InvalidOperationException("Botão moderno sem renderizador próprio.");
+        // Do not clip the HWND: the full client rectangle must be painted, including the corners.
+        // A Region can leave stale edge pixels in WM_PRINT / DrawToBitmap and at fractional DPI.
+        b.Region=null;
         // All buttons receive consistent disabled and focus treatment.
         bool hover=false,down=false;
         float blend=0;
-        var motion=new System.Windows.Forms.Timer{Interval=25};
+        var motion=new System.Windows.Forms.Timer{Interval=16};
+        Font? titleFont=null,descriptionFont=null;
+        b.FontChanged+=(_,_)=>{titleFont?.Dispose();descriptionFont?.Dispose();titleFont=descriptionFont=null;};
         void Animate(){
-            if(!SystemInformation.UIEffectsEnabled||!b.Enabled){motion.Stop();blend=hover&&b.Enabled?1:0;b.Invalidate();return;}
+            if(!SystemInformation.UIEffectsEnabled||!b.Enabled||!b.Visible){motion.Stop();blend=hover&&b.Enabled?1:0;b.Invalidate();return;}
             motion.Start();
         }
         motion.Tick+=(_,_)=>{
             float target=hover&&b.Enabled?1:0;
-            blend=Math.Abs(target-blend)<=1f/6?target:blend+Math.Sign(target-blend)/6f;
+            blend=Math.Abs(target-blend)<=1f/8?target:blend+Math.Sign(target-blend)/8f;
             b.Invalidate();if(blend==target)motion.Stop();
         };
-        b.Disposed+=(_,_)=>motion.Dispose();
+        b.Disposed+=(_,_)=>{motion.Dispose();titleFont?.Dispose();descriptionFont?.Dispose();};
         b.MouseEnter+=(_,_)=>{hover=true;Animate();};b.MouseLeave+=(_,_)=>{hover=false;down=false;Animate();};
-        b.MouseDown+=(_,_)=>{down=true;b.Invalidate();};b.MouseUp+=(_,_)=>{down=false;b.Invalidate();};
+        b.VisibleChanged+=(_,_)=>{if(!b.Visible){motion.Stop();hover=down=false;blend=0;}};b.MouseDown+=(_,_)=>{down=true;b.Invalidate();};b.MouseUp+=(_,_)=>{down=false;b.Invalidate();};
         b.GotFocus+=(_,_)=>b.Invalidate();b.LostFocus+=(_,_)=>b.Invalidate();b.EnabledChanged+=(_,_)=>{Animate();b.Invalidate();};
-        b.Paint+=(_,e)=>{
-            var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;
+        surface.RenderSurface=e=>{
+            var g=e.Graphics;var graphicsState=g.Save();g.SmoothingMode=SmoothingMode.None;g.PixelOffsetMode=PixelOffsetMode.None;
             int scale(int v)=>Math.Max(1,b.LogicalToDeviceUnits(v));
-            var r=new Rectangle(1,1,b.Width-3,b.Height-3);if(r.Width<4||r.Height<4)return;
+            int inset=scale(3);
+            var r=new Rectangle(inset,inset,b.Width-2*inset-1,b.Height-2*inset-1);
+            // Paint every pixel with the exact parent color before drawing the single rounded surface.
+            using(var background=new SolidBrush(b.Parent?.BackColor??Bg))g.FillRectangle(background,b.ClientRectangle);g.SmoothingMode=SmoothingMode.AntiAlias;
+            if(r.Width<4||r.Height<4){g.Restore(graphicsState);return;}
             Color Mix(Color a,Color c,float t)=>Color.FromArgb((int)(a.R+(c.R-a.R)*t),(int)(a.G+(c.G-a.G)*t),(int)(a.B+(c.B-a.B)*t));
             var fill=!b.Enabled?PanelColor:down?SelectionColor:b.BackColor==Accent?Accent:Mix(b.BackColor,Raised,blend);
             var fg=b.Enabled?b.ForeColor:Muted;
-            using var background=new SolidBrush(b.Parent?.BackColor??Bg);g.FillRectangle(background,b.ClientRectangle);
             using var shape=Rounded(r,scale(card?10:6));using var brush=new SolidBrush(fill);g.FillPath(brush,shape);
-            using var edge=new Pen(b.Focused?Accent:Border,b.Focused?2:1);g.DrawPath(edge,shape);
+            using var edge=new Pen(b.Focused?Accent:Border,b.Focused?scale(2):scale(1));g.DrawPath(edge,shape);
             var text=b.Text.Replace("&","");
             int iconSize=scale(card?28:17);
             if(card){
                 var lines=text.Split('\n',2);int x=scale(16),y=scale(12);
                 Glyph(g,kind,new RectangleF(x,y,iconSize,iconSize),b.Enabled?Accent:Muted);
-                using var title=new Font(b.Font.FontFamily,13,FontStyle.Bold);
-                using var desc=new Font(b.Font.FontFamily,10);
+                var title=titleFont??=new Font(b.Font.FontFamily,13,FontStyle.Bold);
+                var desc=descriptionFont??=new Font(b.Font.FontFamily,10);
                 int ty=y+iconSize+scale(5);
                 if(b.Height<scale(128)){ty=scale(10);x=scale(16)+iconSize+scale(10);}
                 TextRenderer.DrawText(g,lines[0],title,new Rectangle(x,ty,Math.Max(1,r.Width-2*x),scale(24)),fg,TextFormatFlags.EndEllipsis|TextFormatFlags.SingleLine|TextFormatFlags.NoPrefix);
@@ -110,17 +138,18 @@ sealed partial class MainForm{
                     TextRenderer.DrawText(g,b.Text,b.Font,new Rectangle(left,0,Math.Max(1,b.Width-left-scale(6)),b.Height),fg,TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|(b.Focused?TextFormatFlags.Default:TextFormatFlags.HidePrefix));
                 }
             }
+            g.Restore(graphicsState);
         };
     }
     void BuildShell(){
-        workspace=new Panel{Dock=DockStyle.Fill,BackColor=Bg};
+        workspace=new BufferedPanel{Dock=DockStyle.Fill,BackColor=Bg};
         Controls.Remove(mainHost!);Controls.Remove(homeHost!);
         workspace.Controls.Add(mainHost!);workspace.Controls.Add(homeHost!);
-        nav=new Panel{Dock=DockStyle.Left,Width=LogicalToDeviceUnits(186),BackColor=PanelColor,AutoScroll=true,Padding=new Padding(6)};
+        nav=new BufferedPanel{Dock=DockStyle.Left,Width=LogicalToDeviceUnits(186),BackColor=PanelColor,AutoScroll=true,Padding=new Padding(6)};
         var stack=new FlowLayoutPanel{Dock=DockStyle.Top,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,BackColor=PanelColor};
         nav.Controls.Add(stack);
         void Add(string name,string glyph,string section,Action action){
-            var b=new Button{Text=name,AccessibleName=name,AccessibleDescription="Navegação: "+name,Height=LogicalToDeviceUnits(37),Width=LogicalToDeviceUnits(168),AutoSize=false,Margin=new Padding(2,2,2,2),TextAlign=ContentAlignment.MiddleLeft,Tag=section,FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink};
+            var b=new ModernButton{Text=name,AccessibleName=name,AccessibleDescription="Navegação: "+name,Height=LogicalToDeviceUnits(37),Width=LogicalToDeviceUnits(168),AutoSize=false,Margin=new Padding(2,2,2,2),TextAlign=ContentAlignment.MiddleLeft,Tag=section,FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink};
             b.FlatAppearance.BorderColor=Border;
             DecorateButton(b,false,glyph,true);b.Click+=(_,_)=>{if(busy)return;action();};
             stack.Controls.Add(b);navButtons.Add(b);hints.SetToolTip(b,name);
@@ -137,7 +166,7 @@ sealed partial class MainForm{
         Add("Feedback","chat","feedback",ShowFeedback);
         Controls.Add(workspace);Controls.Add(nav);
         void LayoutNav(){
-            int width=ClientSize.Width>=LogicalToDeviceUnits(1050)||SystemInformation.HighContrast?LogicalToDeviceUnits(186):LogicalToDeviceUnits(52);
+            int width=ClientSize.Width>=LogicalToDeviceUnits(1024)||SystemInformation.HighContrast?LogicalToDeviceUnits(186):LogicalToDeviceUnits(52);
             nav.Width=width;
             foreach(var b in navButtons)b.Width=Math.Max(20,width-LogicalToDeviceUnits(16));
         }
@@ -149,6 +178,9 @@ sealed partial class MainForm{
         try{
             int dark=Bg.GetBrightness()<0.5f?1:0;
             if(DwmSetWindowAttribute(Handle,20,ref dark,4)!=0)DwmSetWindowAttribute(Handle,19,ref dark,4);
+            // Retain native hit testing, Snap, system menu and accessible caption buttons.
+            int caption=ColorTranslator.ToWin32(PanelColor),text=ColorTranslator.ToWin32(Ink),border=ColorTranslator.ToWin32(Border);
+            DwmSetWindowAttribute(Handle,35,ref caption,4);DwmSetWindowAttribute(Handle,36,ref text,4);DwmSetWindowAttribute(Handle,34,ref border,4);
         }catch(DllNotFoundException){}catch(EntryPointNotFoundException){}
     }
     void SelectNav(string section){
@@ -182,7 +214,7 @@ sealed partial class MainForm{
                 FormBorderStyle=FormBorderStyle.None;Padding=new Padding(12,8,12,12);
                 var bar=new Panel{Dock=DockStyle.Top,Height=LogicalToDeviceUnits(45),BackColor=PanelColor};
                 var title=new Label{Text=Text,Dock=DockStyle.Fill,Font=new Font("Segoe UI Semibold",12),ForeColor=Ink,TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true,Padding=new Padding(9,0,0,0)};
-                var close=new Button{Text="×",AccessibleName="Fechar janela",Dock=DockStyle.Right,Width=LogicalToDeviceUnits(46),FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink,DialogResult=DialogResult.Cancel};
+                var close=new ModernButton{Text="×",AccessibleName="Fechar janela",Dock=DockStyle.Right,Width=LogicalToDeviceUnits(46),FlatStyle=FlatStyle.Flat,BackColor=PanelColor,ForeColor=Ink,DialogResult=DialogResult.Cancel};
                 close.FlatAppearance.BorderColor=Border;DecorateButton(close,false,"close",true);
                 close.Click+=(_,_)=>{DialogResult=DialogResult.Cancel;Close();};
                 bar.Controls.Add(title);bar.Controls.Add(close);
@@ -202,12 +234,13 @@ sealed partial class MainForm{
     // A real indeterminate state; no invented percentages. Animation respects Windows effects.
     sealed class ActivityIndicator:Control{
         readonly System.Windows.Forms.Timer clock=new(){Interval=100};
-        int frame;
+        int frame,completed,total;
+        public void SetPhase(int done,int count){total=Math.Max(0,count);completed=Math.Clamp(done,0,total);AccessibleName=total>0?$"Etapas concluídas: {completed} de {total}":"Operação em andamento";clock.Enabled=total==0&&Visible&&SystemInformation.UIEffectsEnabled&&!SystemInformation.HighContrast;Invalidate();}
         public ActivityIndicator(){
             SetStyle(ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.UserPaint,true);
             AccessibleName="Operação em andamento";AccessibleRole=AccessibleRole.ProgressBar;
             clock.Tick+=(_,_)=>{frame=(frame+1)%20;Invalidate();};
-            VisibleChanged+=(_,_)=>{clock.Enabled=Visible&&SystemInformation.UIEffectsEnabled&&!SystemInformation.HighContrast;Invalidate();};
+            VisibleChanged+=(_,_)=>{clock.Enabled=total==0&&Visible&&SystemInformation.UIEffectsEnabled&&!SystemInformation.HighContrast;Invalidate();};
         }
         protected override void OnPaint(PaintEventArgs e){
             e.Graphics.Clear(Parent?.BackColor??Bg);
@@ -216,7 +249,8 @@ sealed partial class MainForm{
             using var path=Rounded(r,4);using var track=new SolidBrush(PanelColor);g.FillPath(track,path);
             using var edge=new Pen(Border);g.DrawPath(edge,path);
             var state=g.Save();g.SetClip(path);
-            using var brush=new SolidBrush(Accent);int segment=Math.Max(12,r.Width/3);
+            using var brush=new SolidBrush(Accent);if(total>0){int width=(int)((long)r.Width*completed/total);if(width>0)g.FillRectangle(brush,r.X,r.Y,width,r.Height);g.Restore(state);return;}
+            int segment=Math.Max(12,r.Width/3);
             int x=r.X+frame*(r.Width+segment)/19-segment;
             if(!clock.Enabled)x=r.X+r.Width/3;
             g.FillRectangle(brush,x,r.Y,segment,r.Height);g.Restore(state);
@@ -235,7 +269,7 @@ sealed partial class MainForm{
             var created=new List<Button>();
             foreach(var (label,result) in choices){
                 var caption=title=="Atualizações"?(result==DialogResult.Yes?"Abrir site":"Fechar"):label;
-                var button=new Button{Text=caption,DialogResult=result};Style(button);created.Add(button);
+                var button=new ModernButton{Text=caption,DialogResult=result};Style(button);created.Add(button);
             }
             foreach(var b in created.AsEnumerable().Reverse())row.Controls.Add(b);
             var defaultIndex=Math.Clamp((int)defaultButton/256,0,created.Count-1);

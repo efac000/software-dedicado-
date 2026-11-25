@@ -30,11 +30,11 @@ sealed partial class MainForm:Form{
     static Color Bg=Color.FromArgb(9,15,30), PanelColor=Color.FromArgb(16,27,48), Ink=Color.FromArgb(237,244,255), Accent=Color.FromArgb(119,213,249), Border=Color.FromArgb(51,70,101), Muted=Color.FromArgb(170,187,211), Raised=Color.FromArgb(23,38,64);
     readonly TextBox root=new(),destinationRoot=new(),install=new(),log=new(){Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical};
     readonly ComboBox source=new(){DropDownStyle=ComboBoxStyle.DropDownList},target=new(){DropDownStyle=ComboBoxStyle.DropDownList};
-    readonly DataGridView grid=new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AllowUserToResizeRows=false};
+    readonly DataGridView grid=new BufferedGrid(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AllowUserToResizeRows=false};
     readonly CheckBox exclusive=new(){Text="Confirmo: instalação exclusiva, UGC padrão, servidor e reinício automático desligados.",AutoSize=true};
     readonly CheckBox online=new(){Text="Consultar nomes na Steam Workshop (envia somente IDs públicos).",Checked=true,AutoSize=true};
-    readonly Button diagnose=new(){Text="Diagnóstico do dedicado"};
-    readonly Button scan=new(){Text="Localizar clusters"},analyze=new(){Text="Analisar (sem alterações)"},reset=new(){Text="Confirmar e reinstalar",Enabled=false},backups=new(){Text="Central de backups"},website=new(){Text="Site / atualizações"};
+    readonly ModernButton diagnose=new(){Text="Diagnóstico do dedicado"};
+    readonly ModernButton scan=new(){Text="Localizar clusters"},analyze=new(){Text="Analisar (sem alterações)"},reset=new(){Text="Confirmar e reinstalar",Enabled=false},backups=new(){Text="Central de backups"},website=new(){Text="Site / atualizações"};
     readonly Label status=new(){Text="Selecione as pastas e os mundos.",AutoSize=false,Dock=DockStyle.Fill,ForeColor=Muted,AutoEllipsis=true};
     readonly ComboBox mode=new(){DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill};
     readonly ActivityIndicator activity=new(){Dock=DockStyle.Right,Width=110,Visible=false};
@@ -47,10 +47,12 @@ sealed partial class MainForm:Form{
     readonly Label modeHint=new(){AccessibleName="Orientação do modo",Dock=DockStyle.Fill,ForeColor=Muted,TextAlign=ContentAlignment.MiddleLeft};
     Plan? current; bool busy; readonly Dictionary<string,string[]> publishedDependencies=new(StringComparer.Ordinal);
     public MainForm():this(false){}
+    readonly bool smokeMode;
     public MainForm(bool smoke){
+        smokeMode=smoke;
         Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Text="Gerenciador de Dedicado | 1.0.0";MinimumSize=new Size(620,410);Size=new Size(1100,830);AutoScaleMode=AutoScaleMode.Dpi;StartPosition=FormStartPosition.CenterScreen;BackColor=Bg;ForeColor=Ink;Font=new Font("Segoe UI",11);
-        var main=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=15,BackColor=Bg};
+        var main=new BufferedTable{Dock=DockStyle.Fill,Padding=new Padding(24,16,24,12),ColumnCount=1,RowCount=15,BackColor=Bg};
         mainLayout=main;
         foreach(var height in new[]{78,46,44,46,46,46,46,46,46})
             main.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
@@ -73,14 +75,14 @@ sealed partial class MainForm:Form{
         brand.RowStyles.Add(new RowStyle(SizeType.Absolute,24));
         subtitle.Dock=DockStyle.Fill;
         brand.Controls.Add(heading,0,0);brand.Controls.Add(subtitle,0,1);
-        var updater=new Button{Text="Atualizar servidor",Anchor=AnchorStyles.Right};
-        var detect=new Button{Text="Detectar dedicado",Anchor=AnchorStyles.Right};
+        var updater=new ModernButton{Text="Atualizar servidor",Anchor=AnchorStyles.Right};
+        var detect=new ModernButton{Text="Detectar dedicado",Anchor=AnchorStyles.Right};
         Style(detect);detect.Click+=async(_,_)=>await AutoLocate();
         Style(updater);
         updater.Click+=async(_,_)=>await UpdateDedicated();
         top.Controls.Add(brand);
         var topActions=new FlowLayoutPanel{AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Anchor=AnchorStyles.Right,WrapContents=false};
-        var homeButton=new Button{Text="&Início"};Style(homeButton);homeButton.Click+=(_,_)=>ShowHome();
+        var homeButton=new ModernButton{Text="&Início"};Style(homeButton);homeButton.Click+=(_,_)=>ShowHome();
         topActions.Controls.Add(homeButton);topActions.Controls.Add(detect);topActions.Controls.Add(updater);
         top.Controls.Add(topActions);
         main.Controls.Add(top);
@@ -156,7 +158,7 @@ sealed partial class MainForm:Form{
         if(!smoke){Shown+=(_,_)=>FitWorkingArea();DpiChanged+=(_,_)=>BeginInvoke(new Action(FitWorkingArea));}
         if(!smoke){
             LoadPaths();ShowHome();
-            Shown+=async(_,_)=>{RefreshRecoveryNotice();RefreshClusters();await AutoLocate(true);SelectSavedWorld();RefreshHome();await CheckOnStartup();};
+            Shown+=async(_,_)=>{RefreshRecoveryNotice();RefreshClusters();await AutoLocate(true);SelectSavedWorld();RefreshHome();await CheckOnStartup();OfferFirstRunGuide();};
         }
     }
     static void Style(Button b){b.AccessibleName??=b.Text.Replace("&","");b.AutoSize=true;b.MinimumSize=new Size(0,32);b.FlatStyle=FlatStyle.Flat;b.BackColor=PanelColor;b.ForeColor=Ink;b.FlatAppearance.BorderColor=Border;b.FlatAppearance.MouseOverBackColor=Raised;b.FlatAppearance.MouseDownBackColor=Raised;b.Padding=new Padding(8,0,8,0);if(ButtonIcon(b.Text).Length>0)b.Padding=new Padding(28,0,8,0);DecorateButton(b);}
@@ -179,7 +181,7 @@ sealed partial class MainForm:Form{
         box.BackColor=PanelColor;
         box.ForeColor=Ink;
         box.BorderStyle=BorderStyle.FixedSingle;
-        var browse=new Button{Text="Procurar…"};
+        var browse=new ModernButton{Text="Procurar…"};
         Style(browse);
         browse.Click+=(_,_)=>{
             using var dialog=new FolderBrowserDialog{Description=title};
@@ -260,12 +262,15 @@ sealed partial class MainForm:Form{
         UpdateActions();
     }
     void Busy(bool b){
-        busy=b;root.Enabled=destinationRoot.Enabled=install.Enabled=source.Enabled=target.Enabled=scan.Enabled=analyze.Enabled=exclusive.Enabled=online.Enabled=!b;
+        bool ended=busy&&!b;
+        busy=b;if(!b)activity.SetPhase(0,0);root.Enabled=destinationRoot.Enabled=install.Enabled=source.Enabled=target.Enabled=scan.Enabled=analyze.Enabled=exclusive.Enabled=online.Enabled=!b;
         // Disable path-picker buttons as well.
         foreach(Control row in mainLayout!.Controls)if(row is TableLayoutPanel)row.Enabled=!b;
         diagnose.Enabled=backups.Enabled=!b;activity.Visible=b;foreach(var button in navButtons)button.Enabled=!b;RefreshMode();if(!b)RefreshRecoveryNotice();else UpdateActions();RefreshHome();
+        if(ended){lastActivityMessage=status.Text;RefreshActivity();if(!smokeMode)RecordActivity();}
     }
     async Task Diagnose(){
+        EnsureUiContext();
         var cluster=target.SelectedItem is Cluster c?c.Path:destinationRoot.Text;
         if(target.SelectedItem is not Cluster&&!File.Exists(Path.Combine(cluster,"cluster.ini"))){
             using var picker=new FolderBrowserDialog{Description="Selecione a pasta do cluster a diagnosticar (mesmo incompleto)"};
@@ -276,8 +281,9 @@ sealed partial class MainForm:Form{
         try{
             status.Text="Diagnóstico em leitura...";
             var findings=await Task.Run(()=>Diagnostics.Inspect(cluster,installation,Write));
-            using var dialog=new ModernDialog{Text="Diagnóstico do dedicado — 1.0.0",Size=new Size(1020,640),MinimumSize=new Size(650,420),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
-            var header=new TableLayoutPanel{Dock=DockStyle.Top,Height=100,ColumnCount=3,RowCount=2,Padding=new Padding(0,6,0,0)};
+            status.Text=$"Diagnóstico: {findings.Length} ocorrências. Inspeção somente leitura." ;
+            using var dialog=new BufferedPanel{BackColor=Bg,ForeColor=Ink,Padding=new Padding(20,12,20,12)};
+            var header=new BufferedTable{Dock=DockStyle.Top,Height=100,ColumnCount=3,RowCount=2,Padding=new Padding(0,6,0,0)};
             for(int i=0;i<3;i++)header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/3));
             header.RowStyles.Add(new RowStyle(SizeType.Absolute,63));header.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             foreach(var metric in new[]{(Severity.Error,"Erros",Bg.GetBrightness()<0.5f?Color.FromArgb(248,151,151):Color.FromArgb(145,33,33)),(Severity.Warning,"Avisos",WarningColor),(Severity.Info,"Informações",Accent)}){
@@ -286,7 +292,7 @@ sealed partial class MainForm:Form{
             }
             var sub=new Label{Text="Somente leitura. Indícios em logs podem ser históricos.",Dock=DockStyle.Fill,ForeColor=Muted,TextAlign=ContentAlignment.MiddleLeft};
             header.Controls.Add(sub,0,1);header.SetColumnSpan(sub,3);
-            var list=new DataGridView{AccessibleName="Resultados do diagnóstico",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
+            var list=new BufferedGrid{AccessibleName="Resultados do diagnóstico",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.DisplayedCells,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
             list.ColumnHeadersDefaultCellStyle.BackColor=Raised;list.ColumnHeadersDefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.BackColor=Bg;list.DefaultCellStyle.ForeColor=Ink;list.DefaultCellStyle.SelectionBackColor=Raised;list.DefaultCellStyle.SelectionForeColor=Accent;list.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
             foreach(var name in new[]{"Gravidade","Local","Problema","Ação recomendada"})list.Columns.Add(name,name);
             list.Columns[0].FillWeight=45;list.Columns[1].FillWeight=75;list.Columns[2].FillWeight=150;list.Columns[3].FillWeight=180;
@@ -294,9 +300,9 @@ sealed partial class MainForm:Form{
             var filter=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=160,BackColor=PanelColor,ForeColor=Ink,AccessibleName="Filtrar diagnóstico por categoria"};
             filter.Items.AddRange(new object[]{"Todos","Erros","Avisos","Informações"});filter.SelectedIndex=0;
             var query=new TextBox{Width=225,PlaceholderText="Filtrar problema, ID ou local",BackColor=PanelColor,ForeColor=Ink,AccessibleName="Filtrar problema, ID ou local"};
-            var filters=new FlowLayoutPanel{Dock=DockStyle.Top,Height=42};filters.Controls.Add(filter);filters.Controls.Add(query);
+            var filters=new FlowLayoutPanel{Dock=DockStyle.Top,Height=42};filters.Controls.Add(filter);filters.Controls.Add(new Label{Text="Pesquisar:",AutoSize=true,ForeColor=Muted,Margin=new Padding(4,8,2,0)});filters.Controls.Add(query);
             var controls=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=76,FlowDirection=FlowDirection.RightToLeft,WrapContents=true,AutoScroll=true};
-            var close=new Button{Text="Fechar",DialogResult=DialogResult.Cancel};var export=new Button{Text="Salvar relatório TXT"};var prepare=new Button{Text="Preparar operação",Enabled=false};Style(close);Style(export);Style(prepare);
+            var close=new ModernButton{Text="Voltar",AccessibleName="Voltar do diagnóstico"};var export=new ModernButton{Text="Salvar relatório TXT"};var prepare=new ModernButton{Text="Preparar operação",Enabled=false};Style(close);Style(export);Style(prepare);
             var guidance=new Label{Dock=DockStyle.Bottom,Height=44,ForeColor=Muted,Text="Selecione uma ocorrência para ver se há uma operação assistida."};
             bool allowed=Diagnostics.CanPrepare(findings);
             Finding? Selected()=>list.CurrentRow?.Tag as Finding;
@@ -316,18 +322,18 @@ sealed partial class MainForm:Form{
                 UpdateAction();
             }
             filter.SelectedIndexChanged+=(_,_)=>Populate();query.TextChanged+=(_,_)=>Populate();list.SelectionChanged+=(_,_)=>UpdateAction();
-            prepare.Click+=(_,_)=>{var f=Selected();if(f==null||!allowed)return;next=Diagnostics.ActionFor(f);if(next!=DiagnosticAction.None)dialog.DialogResult=DialogResult.OK;};
+            prepare.Click+=(_,_)=>{var f=Selected();if(f==null||!allowed)return;next=Diagnostics.ActionFor(f);if(next!=DiagnosticAction.None)FinishTaskPage(true);};
             Populate();
-            export.Click+=(_,_)=>{using var save=new SaveFileDialog{Filter="Relatório de texto (*.txt)|*.txt",FileName="Diagnostico-Dedicado-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".txt",OverwritePrompt=false};if(save.ShowDialog(dialog)==DialogResult.OK)try{
+            export.Click+=(_,_)=>{using var save=new SaveFileDialog{Filter="Relatório de texto (*.txt)|*.txt",FileName="Diagnostico-Dedicado-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".txt",OverwritePrompt=false};if(save.ShowDialog(this)==DialogResult.OK)try{
                 Engine.SafePath(save.FileName);
                 using var stream=new FileStream(save.FileName,FileMode.CreateNew,FileAccess.Write,FileShare.None);
                 using var writer=new StreamWriter(stream,Encoding.UTF8);
                 foreach(var line in new[]{"Gerenciador de Dedicado 1.0.0","Diagnóstico limitado e somente leitura; sem tokens ou linhas brutas de log."}.Concat(findings.Select(f=>$"[{f.Level}] {f.Code} | {f.Scope}\n{f.Problem}\n{f.Advice}\n")))writer.WriteLine(line);
-            }catch(Exception e){Notice.Show(dialog,e.Message,"Falha ao salvar");}};
+            }catch(Exception e){Notice.Show(this,e.Message,"Falha ao salvar");}};
 
-            var copyReport=new Button{Text="Copiar relatório"};Style(copyReport);
-            copyReport.Click+=(_,_)=>{try{Clipboard.SetText(string.Join(Environment.NewLine,findings.Select(f=>$"[{f.Level}] {f.Scope}: {f.Problem} — {f.Advice}")));}catch(Exception){Notice.Show(dialog,"Não foi possível copiar o relatório.","Diagnóstico");}};
-            controls.Controls.Add(close);controls.Controls.Add(export);controls.Controls.Add(copyReport);controls.Controls.Add(prepare);dialog.Controls.Add(list);dialog.Controls.Add(filters);dialog.Controls.Add(header);dialog.Controls.Add(guidance);dialog.Controls.Add(controls);dialog.CancelButton=close;PrepareAccessibility(dialog);dialog.ShowDialog(this);
+            var copyReport=new ModernButton{Text="Copiar relatório"};Style(copyReport);
+            copyReport.Click+=(_,_)=>{try{Clipboard.SetText(string.Join(Environment.NewLine,findings.Select(f=>$"[{f.Level}] {f.Scope}: {f.Problem} — {f.Advice}")));}catch(Exception){Notice.Show(this,"Não foi possível copiar o relatório.","Diagnóstico");}};
+            controls.Controls.Add(close);controls.Controls.Add(export);controls.Controls.Add(copyReport);controls.Controls.Add(prepare);dialog.Controls.Add(list);dialog.Controls.Add(filters);dialog.Controls.Add(header);dialog.Controls.Add(guidance);dialog.Controls.Add(controls);close.Click+=(_,_)=>FinishTaskPage(false);await ShowTaskPage("diagnostic",dialog,840,560,close);
             status.Text="Diagnóstico concluído. Nenhuma alteração no dedicado.";
         }catch(Exception e){next=DiagnosticAction.None;Write("Diagnóstico não concluído: "+e.Message);status.Text="Diagnóstico incompleto.";}finally{Busy(false);}
         if(next!=DiagnosticAction.None){
@@ -348,6 +354,7 @@ sealed partial class MainForm:Form{
         }
     }
     async Task Analyze(){
+        EnsureUiContext();
         InvalidatePlan();
 
         if(target.SelectedItem is not Cluster b||(!InPlace&&source.SelectedItem is not Cluster)){
@@ -359,21 +366,22 @@ sealed partial class MainForm:Form{
         var a=InPlace?b:(Cluster)source.SelectedItem!;
         var installation=install.Text;bool lookup=online.Checked;var selectedMode=mode.SelectedIndex;Busy(true);
         try{
-            status.Text="Lendo configurações e validando caminhos...";
+            activity.SetPhase(0,3);status.Text="Etapa 1 de 3 · Lendo configurações e validando caminhos...";
             var plan=await Task.Run(()=>{var dest=Engine.LoadClusterDirectory(b.Path);return selectedMode==0?Engine.Analyze(Engine.LoadClusterDirectory(a.Path),dest,installation):selectedMode==1?Engine.AnalyzeRepair(dest,installation):Engine.AnalyzeEditBaseline(dest,installation);});
+            activity.SetPhase(1,3);status.Text="Etapa 2 de 3 · Revisando configuração...";
             if(selectedMode>=2){
-                var edits=selectedMode==2?EditVisual(plan,lookup):EditOverrides(plan);
+                var edits=selectedMode==2?await EditVisual(plan,lookup):EditOverrides(plan);
                 if(edits==null){status.Text="Edição cancelada. Nenhum arquivo alterado.";return;}
                 var baseline=plan.Fingerprint;var dest=plan.Target;
                 plan=await Task.Run(()=>Engine.AnalyzeRepair(Engine.LoadClusterDirectory(dest.Path),installation,edits,baseline));
             }
-            await ShowPlan(plan,lookup);
+            activity.SetPhase(2,3);await ShowPlan(plan,lookup);activity.SetPhase(3,3);
         }catch(Exception e){Write("Análise bloqueada: "+e.Message);status.Text="Análise bloqueada. Confira as pastas e o registro abaixo.";}finally{Busy(false);}
     }
     async Task ShowPlan(Plan plan,bool lookup){
             var ids=plan.Shards.SelectMany(s=>s.Wanted.Concat(s.Old)).Distinct().ToArray();
             status.Text="Consultando nomes dos mods...";
-            var names=await Names(ids,plan,lookup);
+            var names=await Task.Run(()=>Names(ids,plan,lookup));
             foreach(var s in plan.Shards)foreach(var id in s.Wanted.Concat(s.Old).Distinct().Order()){
                 var action=s.Wanted.Contains(id)?s.Old.Contains(id)?(plan.Edited?"Reinstalar / opções editadas":plan.InPlace?"Reinstalar / manter opções":"Reinstalar / copiar opções"):"Adicionar":"Remover da configuração";
                 var rowIndex=grid.Rows.Add(names.GetValueOrDefault(id,"Nome não identificado"),id,s.Name,action);
@@ -386,48 +394,54 @@ sealed partial class MainForm:Form{
             Write("Simulação concluída. Nenhum arquivo alterado. Revise a lista e confirme instalação exclusiva.");
             if(names.Values.Any(n=>n=="Nome não identificado"))Write("Alguns nomes não puderam ser consultados. Confira os IDs na Workshop.");
     }
-    Dictionary<string,byte[]>? EditVisual(Plan plan,bool lookup){
-        using var dialog=new ModernDialog{Text="Catálogo de mods — "+plan.Target.Name,Size=new Size(1000,650),MinimumSize=new Size(760,520),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
+    async Task<Dictionary<string,byte[]>?> EditVisual(Plan plan,bool lookup){
+        var dialog=new BufferedPanel{BackColor=Bg,ForeColor=Ink,Padding=new Padding(16,12,16,12)};
         var utf8=new UTF8Encoding(false,true);
         var texts=plan.Shards.ToDictionary(s=>s.Name,s=>utf8.GetString(s.Content).TrimStart('\uFEFF'));
         var names=new Dictionary<string,string>();var previews=new Dictionary<string,string>();
         var shard=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=105,BackColor=PanelColor,ForeColor=Ink,AccessibleName="Selecionar Master ou Caves"};
         shard.Items.AddRange(plan.Target.Shards.Cast<object>().ToArray());shard.SelectedIndex=0;
         var input=new TextBox{Width=270,PlaceholderText="ID ou link HTTPS da Workshop",BackColor=PanelColor,ForeColor=Ink,AccessibleName="ID ou link HTTPS da Workshop"};
-        Button add=new(){Text="Adicionar / ativar"},toggle=new(){Text="Ativar / desativar"},refresh=new(){Text="Consultar Workshop"},open=new(){Text="Abrir Workshop"},ok=new(){Text="Revisar plano"},cancel=new(){Text="Cancelar",DialogResult=DialogResult.Cancel};
-        var options=new Button{Text="Editar opções"};
-        var browseWorkshop=new Button{Text="Pesquisar na Workshop"};
+        ModernButton add=new(){Text="Adicionar / ativar"},toggle=new(){Text="Ativar / desativar"},refresh=new(){Text="Consultar Workshop"},open=new(){Text="Abrir Workshop"},ok=new(){Text="Revisar plano"},cancel=new(){Text="Cancelar",AccessibleName="Cancelar edição de mods"};
+        var options=new ModernButton{Text="Editar opções"};
+        var browseWorkshop=new ModernButton{Text="Pesquisar na Workshop"};
         foreach(var b in new[]{add,toggle,options,refresh,open,browseWorkshop,ok,cancel})Style(b);
         var search=new TextBox{Width=200,MaxLength=120,PlaceholderText="Filtrar ou pesquisar por nome",BackColor=PanelColor,ForeColor=Ink,AccessibleName="Filtrar ou pesquisar mod por nome"};
         var message=new Label{Dock=DockStyle.Bottom,Height=38,ForeColor=Muted,Text="Alterações em memória. Selecione um shard e revise antes de aplicar.",AccessibleName="Estado da consulta"};
         var catalogSummary=new Label{Dock=DockStyle.Top,Height=42,BackColor=PanelColor,ForeColor=Ink,Padding=new Padding(10,0,0,0),TextAlign=ContentAlignment.MiddleLeft,AccessibleName="Contagem de mods do shard"};
-        var table=new DataGridView{AccessibleName="Catálogo de mods por shard",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
+        var table=new BufferedGrid{AccessibleName="Catálogo de mods por shard",Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,RowHeadersVisible=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=PanelColor,EnableHeadersVisualStyles=false};
         table.ColumnHeadersDefaultCellStyle.BackColor=Raised;table.ColumnHeadersDefaultCellStyle.ForeColor=Ink;table.DefaultCellStyle.BackColor=Bg;table.DefaultCellStyle.ForeColor=Ink;table.DefaultCellStyle.SelectionBackColor=Raised;table.DefaultCellStyle.SelectionForeColor=Accent;
         foreach(var h in new[]{"Mod","ID","Estado"})table.Columns.Add(h,h);table.Columns[0].FillWeight=180;table.Paint+=(_,e)=>{if(table.Rows.Count==0)TextRenderer.DrawText(e.Graphics,"Nenhum mod nesta visualização."+Environment.NewLine+"Adicione por ID/link ou pesquise na Workshop.",Font,new Rectangle(10,table.ColumnHeadersHeight+10,Math.Max(1,table.Width-20),Math.Max(1,table.Height-table.ColumnHeadersHeight-20)),Muted,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.WordBreak);};
         var preview=new PictureBox{Dock=DockStyle.Top,Height=210,BackColor=PanelColor,SizeMode=PictureBoxSizeMode.Zoom};preview.Paint+=(_,e)=>{if(preview.Image==null){int size=48;Glyph(e.Graphics,"puzzle",new RectangleF((preview.Width-size)/2,(preview.Height-size)/2,size,size),Muted);}};
         var title=new Label{Dock=DockStyle.Top,Height=74,ForeColor=Ink,Text="Selecione um mod para visualizar."};
-        var panel=new Panel{Dock=DockStyle.Right,Width=250,Padding=new Padding(8),BackColor=PanelColor};panel.Controls.Add(title);panel.Controls.Add(preview);
+        var panel=new BufferedPanel{Dock=DockStyle.Right,Width=220,Padding=new Padding(8),BackColor=PanelColor};panel.Controls.Add(title);panel.Controls.Add(preview);
         var controls=new FlowLayoutPanel{Dock=DockStyle.Top,Height=120,Padding=new Padding(4),AutoScroll=true,WrapContents=true};
         shard.AccessibleName="Shard selecionado";
         table.AccessibleName="Mods do shard selecionado";
         input.AccessibleName="Adicionar por ID ou link Workshop";
         search.AccessibleName="Filtrar catálogo por nome ou ID";
-        controls.Controls.AddRange(new Control[]{shard,input,add,toggle,options,search,browseWorkshop,refresh,open});
+        var idLabel=new Label{Text="ID / link:",AutoSize=true,Margin=new Padding(4,8,2,0),ForeColor=Muted};
+        var searchLabel=new Label{Text="Filtro:",AutoSize=true,Margin=new Padding(4,8,2,0),ForeColor=Muted};
+        controls.Controls.AddRange(new Control[]{shard,idLabel,input,add,toggle,options,searchLabel,search,browseWorkshop,refresh,open});
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};actions.Controls.Add(cancel);actions.Controls.Add(ok);
-        dialog.Controls.Add(table);dialog.Controls.Add(panel);dialog.Controls.Add(message);dialog.Controls.Add(actions);dialog.Controls.Add(controls);dialog.Controls.Add(catalogSummary);dialog.CancelButton=cancel;
-        bool loading=false;int previewGeneration=0;using var lifetime=new CancellationTokenSource();CancellationTokenSource? activePreview=null;
+        dialog.Controls.Add(table);dialog.Controls.Add(panel);dialog.Controls.Add(message);dialog.Controls.Add(actions);dialog.Controls.Add(controls);dialog.Controls.Add(catalogSummary);
+        var chart=new BufferedPanel{Dock=DockStyle.Top,Height=14,BackColor=PanelColor,AccessibleName="Proporção de mods ativos e desativados"};dialog.Controls.Add(chart);
+        bool loading=false,populating=false;int previewGeneration=0;using var lifetime=new CancellationTokenSource();CancellationTokenSource? activePreview=null;
         string Shard()=>shard.SelectedItem!.ToString()!;
         string? Selected()=>table.CurrentRow?.Cells[1].Value as string;
         void ClearImage(){var old=preview.Image;preview.Image=null;old?.Dispose();}
         void Populate(string? select=null){
             var entries=Lua.Entries(texts[Shard()]);
-            catalogSummary.Text=$"{Shard()}   |   {entries.Count} mods   |   {entries.Count(x=>x.Value)} ativos   |   {entries.Count(x=>!x.Value)} desativados";
-            table.Rows.Clear();
-            foreach(var (id,enabled) in Lua.Entries(texts[Shard()]).OrderBy(x=>names.GetValueOrDefault(x.Key,x.Key),StringComparer.OrdinalIgnoreCase)){
+            chart.Tag=(entries.Count(x=>x.Value),entries.Count);chart.Invalidate();
+            catalogSummary.Text=$"{plan.Target.Name} · {Shard()}   |   {entries.Count} mods   |   {entries.Count(x=>x.Value)} ativos   |   {entries.Count(x=>!x.Value)} desativados";
+            populating=true;table.SuspendLayout();
+            try{table.Rows.Clear();
+            foreach(var (id,enabled) in entries.OrderBy(x=>names.GetValueOrDefault(x.Key,x.Key),StringComparer.OrdinalIgnoreCase)){
                 var name=names.GetValueOrDefault(id,"Nome não consultado");
                 if(!name.Contains(search.Text,StringComparison.OrdinalIgnoreCase)&&!id.Contains(search.Text,StringComparison.OrdinalIgnoreCase))continue;
                 var index=table.Rows.Add(name,id,enabled?"Ativo":"Desativado");if(id==select)table.CurrentCell=table.Rows[index].Cells[0];
-            }
+            }}finally{table.ResumeLayout();populating=false;}
+            UpdateCatalogActions();_ = ShowPreview();
         }
         void UpdateCatalogActions(){
             bool has=Selected()!=null;
@@ -440,14 +454,15 @@ sealed partial class MainForm:Form{
                 var all=texts.Values.SelectMany(t=>Lua.Entries(t).Keys).Distinct().ToArray();
                 message.Text="Consultando dados públicos da Workshop...";
                 var updated=new Dictionary<string,string>();
-                var found=await Names(all,plan,lookup,updated);
+                var token=lifetime.Token;var found=await Task.Run(()=>Names(all,plan,lookup,updated,token),token);
                 if(lifetime.IsCancellationRequested||dialog.IsDisposed)return;
                 foreach(var (id,name) in found)names[id]=name;
                 foreach(var id in all)previews.Remove(id);
                 foreach(var (id,url) in updated)previews[id]=url;
                 Populate(Selected());message.Text="Mods listados. Imagens originais aparecem ao selecionar um mod.";
-            }catch(Exception e){if(!dialog.IsDisposed)message.Text="Consulta indisponível: "+e.Message;}
-            finally{loading=false;if(!dialog.IsDisposed)UpdateCatalogActions();}
+            }catch(OperationCanceledException)when(lifetime.IsCancellationRequested){}
+            catch(Exception e){if(!dialog.IsDisposed&&!lifetime.IsCancellationRequested)message.Text="Consulta indisponível: "+e.Message;}
+            finally{loading=false;if(!dialog.IsDisposed&&!lifetime.IsCancellationRequested)UpdateCatalogActions();}
         }
         async Task ShowPreview(){
             var generation=++previewGeneration;activePreview?.Cancel();activePreview?.Dispose();activePreview=null;ClearImage();var id=Selected();title.Text=id==null?"Selecione um mod":names.GetValueOrDefault(id,id)+"\nWorkshop "+id;
@@ -460,7 +475,7 @@ sealed partial class MainForm:Form{
         }
         void Edit(string id,bool enabled){
             try{texts[Shard()]=Lua.SetEnabled(texts[Shard()],id,enabled);Populate(id);message.Text="Alteração preparada; nenhum arquivo gravado.";}
-            catch(Exception e){Notice.Show(dialog,e.Message,"Configuração inválida");}
+            catch(Exception e){Notice.Show(this,e.Message,"Configuração inválida");}
         }
         add.Click+=async(_,_)=>{if(!WorkshopId.TryParse(input.Text,out var id)){message.Text="Use um ID numérico válido ou link HTTPS oficial.";return;}Edit(id,true);input.Clear();await Lookup();};
         toggle.Click+=(_,_)=>{var id=Selected();if(id!=null&&Lua.Entries(texts[Shard()]).TryGetValue(id,out var enabled))Edit(id,!enabled);};
@@ -474,30 +489,35 @@ sealed partial class MainForm:Form{
                     try{Engine.SafePath(path);if(File.Exists(path)&&new FileInfo(path).Length<=1_000_000)declared=Lua.DeclaredOptions(File.ReadAllText(path));if(declared.Length>0)break;}
                     catch(IOException){}catch(UnauthorizedAccessException){}
                 }
-                var edited=EditModOptions(dialog,original,id,selectedShard,declared);
+                var edited=EditModOptions(this,original,id,selectedShard,declared);
                 if(edited==original)return;
                 texts[selectedShard]=edited;
                 message.Text="Opções preparadas. Revise o plano para continuar.";
-            }catch(FormatException error){Notice.Show(dialog,error.Message,"Configuração inválida");}
+            }catch(FormatException error){Notice.Show(this,error.Message,"Configuração inválida");}
         };
         shard.SelectedIndexChanged+=(_,_)=>Populate();search.TextChanged+=(_,_)=>Populate(Selected());
-        table.SelectionChanged+=async(_,_)=>{UpdateCatalogActions();await ShowPreview();};
+        table.SelectionChanged+=async(_,_)=>{if(populating)return;UpdateCatalogActions();await ShowPreview();};
         refresh.Click+=async(_,_)=>await Lookup();
         browseWorkshop.Click+=async(_,_)=>{
             if(loading)return;
             var selectedShard=Shard();
-            var hit=BrowseWorkshop(dialog,search.Text,selectedShard);
+            var hit=BrowseWorkshop(this,search.Text,selectedShard);
             if(hit==null||Shard()!=selectedShard)return;
             if(hit.PublishedDependencies!=null)publishedDependencies[hit.Id]=hit.PublishedDependencies; search.Clear();Edit(hit.Id,true);await Lookup();
         };
         open.Click+=(_,_)=>{var id=Selected();Open(id==null?"https://steamcommunity.com/app/322330/workshop/":"https://steamcommunity.com/sharedfiles/filedetails/?id="+id);};
         Dictionary<string,byte[]>? result=null;
         ok.Click+=(_,_)=>{try{var candidate=new Dictionary<string,byte[]>();foreach(var sh in plan.Shards){var text=texts[sh.Name];Lua.Active(text);candidate[sh.Name]=text==utf8.GetString(sh.Content).TrimStart('\uFEFF')?sh.Content:utf8.GetBytes(text);}
-            if(!candidate.Values.Any(b=>Lua.Active(utf8.GetString(b).TrimStart('\uFEFF')).Count>0)&&Notice.Show(dialog,"Todos os mods ficarão desativados. Entidades dependentes de mods podem desaparecer ao iniciar o mundo. Prosseguir apenas para revisão?","Lista vazia",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
-            result=candidate;dialog.DialogResult=DialogResult.OK;}catch(Exception e){message.Text=e.Message;}};
-        dialog.FormClosing+=(_,e)=>{if(loading){e.Cancel=true;message.Text="A consulta está em andamento.";}else{lifetime.Cancel();activePreview?.Cancel();activePreview?.Dispose();activePreview=null;++previewGeneration;ClearImage();}};
-        Populate();UpdateCatalogActions();dialog.Shown+=async(_,_)=>await Lookup();
-        PrepareAccessibility(dialog);return dialog.ShowDialog(this)==DialogResult.OK?result:null;
+            if(!candidate.Values.Any(b=>Lua.Active(utf8.GetString(b).TrimStart('\uFEFF')).Count>0)&&Notice.Show(this,"Todos os mods ficarão desativados. Entidades dependentes de mods podem desaparecer ao iniciar o mundo. Prosseguir apenas para revisão?","Lista vazia",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+            result=candidate;FinishTaskPage(true);}catch(Exception e){message.Text=e.Message;}};
+        chart.Paint+=(_,e)=>{if(chart.Tag is ValueTuple<int,int> counts&&counts.Item2>0){int width=(int)((long)chart.Width*counts.Item1/counts.Item2);using var fill=new SolidBrush(Accent);if(width>0)e.Graphics.FillRectangle(fill,0,0,width,chart.Height);}};
+        cancel.Click+=(_,_)=>{lifetime.Cancel();FinishTaskPage(false);};
+        Populate();UpdateCatalogActions();
+        status.Text="Catálogo: alterações apenas em memória. Revise ou cancele.";
+        var pending=ShowTaskPage("mods",dialog,840,590,cancel);
+        _=Lookup();
+        try{return await pending?result:null;}
+        finally{lifetime.Cancel();activePreview?.Cancel();activePreview?.Dispose();activePreview=null;++previewGeneration;ClearImage();dialog.Dispose();}
     }
     Dictionary<string,byte[]>? EditOverrides(Plan plan){
         using var dialog=new ModernDialog{Text="Editar mods — "+plan.Target.Name,Size=new Size(820,570),MinimumSize=new Size(580,380),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
@@ -510,25 +530,26 @@ sealed partial class MainForm:Form{
         }
         var hint=new Label{Dock=DockStyle.Top,Height=76,Text="Edite apenas a tabela literal return { ... }. Para incluir um mod, adicione uma entrada ['workshop-ID']={enabled=true,configuration_options={}}, dentro da tabela. Para desativar, use enabled=false. Nada será gravado antes da análise e das duas confirmações."};
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46,FlowDirection=FlowDirection.RightToLeft};
-        var ok=new Button{Text="Validar edição"};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(ok);Style(cancel);
+        var ok=new ModernButton{Text="Validar edição"};var cancel=new ModernButton{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(ok);Style(cancel);
         Dictionary<string,byte[]>? result=null;
         ok.Click+=(_,_)=>{try{var candidate=new Dictionary<string,byte[]>();foreach(var shard in plan.Shards){var edit=editors[shard.Name];var data=edit.Box.Text==edit.Initial?shard.Content: utf8.GetBytes(edit.Box.Text);if(data.Length>4_000_000)throw new FormatException("Arquivo grande demais.");Lua.Active(utf8.GetString(data).TrimStart('\uFEFF'));candidate.Add(shard.Name,data);}result=candidate;dialog.DialogResult=DialogResult.OK;}catch(Exception e){Notice.Show(dialog,e.Message,"Configuração inválida",MessageBoxButtons.OK,MessageBoxIcon.Warning);}};
         actions.Controls.Add(cancel);actions.Controls.Add(ok);dialog.Controls.Add(tabs);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.CancelButton=cancel;
         PrepareAccessibility(dialog);return dialog.ShowDialog(this)==DialogResult.OK?result:null;
     }
-    static async Task<Dictionary<string,string>> Names(string[] ids,Plan plan,bool online,Dictionary<string,string>? previews=null){
+    static async Task<Dictionary<string,string>> Names(string[] ids,Plan plan,bool online,Dictionary<string,string>? previews=null,CancellationToken cancellation=default){
         var result=new Dictionary<string,string>();
         foreach(var id in ids){
+            cancellation.ThrowIfCancellationRequested();
             var paths=plan.Target.Shards.SelectMany(shard=>Engine.ModInfoPaths(plan,shard,id)).Distinct();
             foreach(var p in paths)try{if(File.Exists(p)&&new FileInfo(p).Length<1_000_000){Engine.SafePath(p);var m=Regex.Match(File.ReadAllText(p),"""(?m)^\s*name\s*=\s*["']([^"'\r\n]+)["']""");if(m.Success){result[id]=m.Groups[1].Value+" (local)";break;}}}catch{}
         }
         if(online)try{
             using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(12)};
-            using var limit=new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            using var limit=CancellationTokenSource.CreateLinkedTokenSource(cancellation);limit.CancelAfter(TimeSpan.FromSeconds(25));
             foreach(var chunk in ids.Chunk(50)){
                 var data=new Dictionary<string,string>{{"itemcount",chunk.Length.ToString()}};for(int i=0;i<chunk.Length;i++)data["publishedfileids["+i+"]"]=chunk[i];
                 using var response=await http.PostAsync("https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/",new FormUrlEncodedContent(data),limit.Token);response.EnsureSuccessStatusCode();
-                using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(limit.Token));
                 foreach(var item in json.RootElement.GetProperty("response").GetProperty("publishedfiledetails").EnumerateArray()){
                     var id=item.GetProperty("publishedfileid").GetString();if(id==null||!chunk.Contains(id))continue;
                     if(item.TryGetProperty("result",out var r)&&r.GetInt32()==1&&item.TryGetProperty("title",out var title)&&item.TryGetProperty("consumer_app_id",out var app)&&app.GetInt32()==322330){
@@ -538,8 +559,8 @@ sealed partial class MainForm:Form{
                     else result[id]="Workshop indisponível / privada";
                 }
             }
-        }catch{}
-        foreach(var id in ids)result.TryAdd(id,"Nome não identificado");return result;
+        }catch(OperationCanceledException)when(cancellation.IsCancellationRequested){throw;}catch{}
+        cancellation.ThrowIfCancellationRequested();foreach(var id in ids)result.TryAdd(id,"Nome não identificado");return result;
     }
     async Task Reset(){
         var p=current;if(p==null||!exclusive.Checked)return;
@@ -549,29 +570,32 @@ sealed partial class MainForm:Form{
         var layout=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(15)};
         var phrase=(p.Ids.Length==0?"DESATIVAR TODOS ":"RESET ")+p.Target.FolderName;
         var label=new Label{Text=(p.Ids.Length==0?"ATENÇÃO: TODOS OS MODS SERÃO DESATIVADOS.\n":"")+"Destino: "+p.Target.Name+"\n"+p.Target.Path+"\n\nSomente caches V1 dos IDs afetados e UGC do destino serão movidos.\nMods removidos podem afetar entidades ao iniciar o mundo.\nDigite exatamente: "+phrase,AutoSize=true,MaximumSize=new Size(570,0)};
-        var input=new TextBox{Width=450,BackColor=PanelColor,ForeColor=Ink,BorderStyle=BorderStyle.FixedSingle,AccessibleName="Digite a frase de confirmação",AccessibleDescription=phrase};var confirm=new Button{Text="Executar",Enabled=false,DialogResult=DialogResult.OK};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};input.TextChanged+=(_,_)=>confirm.Enabled=input.Text==phrase;
+        var input=new TextBox{Width=450,BackColor=PanelColor,ForeColor=Ink,BorderStyle=BorderStyle.FixedSingle,AccessibleName="Digite a frase de confirmação",AccessibleDescription=phrase};var confirm=new ModernButton{Text="Executar",Enabled=false,DialogResult=DialogResult.OK};var cancel=new ModernButton{Text="Cancelar",DialogResult=DialogResult.Cancel};input.TextChanged+=(_,_)=>confirm.Enabled=input.Text==phrase;
         Style(confirm);Style(cancel);layout.Controls.Add(label);layout.Controls.Add(input);layout.Controls.Add(confirm);layout.Controls.Add(cancel);dialog.Controls.Add(layout);dialog.CancelButton=cancel;dialog.AcceptButton=confirm;
         PrepareAccessibility(dialog);if(dialog.ShowDialog(this)!=DialogResult.OK||input.Text!=phrase)return;
         Busy(true);try{status.Text="Aplicando plano aprovado (backup, caches e atualização dos shards)";var result=await Task.Run(()=>Engine.Apply(p,Write));Write("Atualizadores concluídos. Backup: "+result);Write("Confira os logs e teste a entrada no mundo e nas cavernas. Não reiniciamos o servidor.");status.Text="Manutenção concluída; validação do mundo pendente.";}catch(Exception e){Write(e.Message);status.Text="Falha: leia o relatório antes de iniciar o mundo.";}finally{current=null;Busy(false);}
     }
     static void Open(string url){try{Process.Start(new ProcessStartInfo(url){UseShellExecute=true});}catch(Exception e){Notice.Show(e.Message);}}
+    string? backupRootOverride=null;
     async Task OpenBackups(){
+        EnsureUiContext();
         if(busy)return;
-        var rootPath=Recovery.DefaultRoot;Directory.CreateDirectory(rootPath);
+        var rootPath=backupRootOverride??Recovery.DefaultRoot;Directory.CreateDirectory(rootPath);
         try{if(InterruptedMaintenance.Pending(rootPath).Length>0){await RecoverInterrupted(rootPath);return;}}catch(Exception ex){Write("Recuperação: "+ex.Message);return;}
-        using var dialog=new ModernDialog{Text="Central de backups — configurações de mods",Size=new Size(850,480),MinimumSize=new Size(620,360),StartPosition=FormStartPosition.CenterParent,BackColor=Bg,ForeColor=Ink,Font=Font};
+        using var dialog=new BufferedPanel{BackColor=Bg,ForeColor=Ink,Padding=new Padding(20,12,20,12)};
         var hint=new Label{Dock=DockStyle.Top,Height=82,ForeColor=Muted,Text="Recupere configurações de mods de backups com manifesto de integridade. Selecione primeiro o mesmo cluster e instalação na janela principal. Saves, tokens e server.ini atuais NÃO serão restaurados. Backups antigos podem ser abertos na pasta."};
         var list=new ListBox{AccessibleName="Backups disponíveis",Dock=DockStyle.Fill,BackColor=PanelColor,ForeColor=Ink,HorizontalScrollbar=true};
         try{list.Items.AddRange(Recovery.List(rootPath).Cast<object>().ToArray());}catch(Exception e){Write("Backups: "+e.Message);return;}
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};
-        var close=new Button{Text="Fechar",DialogResult=DialogResult.Cancel};var folder=new Button{Text="Abrir pasta"};var prepare=new Button{Text="Preparar recuperação",Enabled=false};
+        var close=new ModernButton{Text="Voltar",AccessibleName="Voltar dos backups"};var folder=new ModernButton{Text="Abrir pasta"};var prepare=new ModernButton{Text="Preparar recuperação",Enabled=false};
         foreach(var button in new[]{close,folder,prepare})Style(button);
         list.SelectedIndexChanged+=(_,_)=>prepare.Enabled=list.SelectedItem is string&&target.SelectedItem is Cluster;
         folder.Click+=(_,_)=>Open(rootPath);
-        prepare.Click+=(_,_)=>dialog.DialogResult=DialogResult.OK;
+        prepare.Click+=(_,_)=>FinishTaskPage(true);close.Click+=(_,_)=>FinishTaskPage(false);
         actions.Controls.Add(close);actions.Controls.Add(prepare);actions.Controls.Add(folder);
-        if(list.Items.Count==0){dialog.Controls.Add(new Label{Dock=DockStyle.Fill,Text="Nenhum backup encontrado."+Environment.NewLine+"Os backups de configuração são criados durante operações de manutenção.",TextAlign=ContentAlignment.MiddleCenter,ForeColor=Muted,BackColor=PanelColor,AccessibleName="Nenhum backup encontrado"});}else dialog.Controls.Add(list);dialog.Controls.Add(hint);dialog.Controls.Add(actions);dialog.CancelButton=close;
-        PrepareAccessibility(dialog);if(dialog.ShowDialog(this)!=DialogResult.OK||list.SelectedItem is not string backup||target.SelectedItem is not Cluster chosen)return;
+        if(list.Items.Count==0){dialog.Controls.Add(new Label{Dock=DockStyle.Fill,Text="Nenhum backup encontrado."+Environment.NewLine+"Os backups de configuração são criados durante operações de manutenção.",TextAlign=ContentAlignment.MiddleCenter,ForeColor=Muted,BackColor=PanelColor,AccessibleName="Nenhum backup encontrado"});}else dialog.Controls.Add(list);dialog.Controls.Add(hint);dialog.Controls.Add(actions);
+        bool accepted;Busy(true);status.Text="Backups: selecione uma configuração para preparar a recuperação.";try{accepted=await ShowTaskPage("backups",dialog,700,420,close);}finally{Busy(false);}
+        if(!accepted||list.SelectedItem is not string backup||target.SelectedItem is not Cluster chosen)return;
         var installation=install.Text;var lookup=online.Checked;
         mode.SelectedIndex=1;destinationRoot.Text=chosen.Path;RefreshClusters();
         var index=target.Items.Cast<Cluster>().ToList().FindIndex(x=>x.Path.Equals(chosen.Path,StringComparison.OrdinalIgnoreCase));

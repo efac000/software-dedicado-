@@ -59,8 +59,8 @@ sealed partial class MainForm {
             Dock=DockStyle.Top,Padding=new Padding(14,0,14,0),Height=52,TextAlign=ContentAlignment.MiddleLeft,
             Text="Edite as opções gravadas. O plano ainda precisa ser revisado.",ForeColor=Muted
         };
-        var save=new Button{Text="Salvar no plano"};
-        var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};
+        var save=new ModernButton{Text="Salvar no plano"};
+        var cancel=new ModernButton{Text="Cancelar",DialogResult=DialogResult.Cancel};
         Style(save);
         Style(cancel);
         var actions=new FlowLayoutPanel{

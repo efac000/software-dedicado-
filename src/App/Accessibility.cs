@@ -3,7 +3,7 @@ sealed partial class MainForm{
     Panel? mainHost,homeHost;
     const string FeedbackBase="https://github.com/efac000/software-dedicado-/issues";
     Panel CreateViewport(Control content,int minWidth,int minHeight){
-        var viewport=new Panel{Dock=DockStyle.Fill,AutoScroll=true,BackColor=Bg,TabStop=false};
+        var viewport=new BufferedPanel{Dock=DockStyle.Fill,AutoScroll=true,BackColor=Bg,TabStop=false};
         content.Dock=DockStyle.None;content.Location=Point.Empty;
         viewport.Controls.Add(content);
         bool queued=false;
@@ -21,15 +21,18 @@ sealed partial class MainForm{
         viewport.HandleCreated+=(_,_)=>Resize();
         return viewport;
     }
+    internal static Size CalculateViewport(Size size,int w,int h,int barW,int barH){
+        bool vertical=size.Height<h,horizontal=size.Width<w;
+        vertical|=horizontal&&size.Height-barH<h;
+        horizontal|=vertical&&size.Width-barW<w;
+        return new Size(Math.Max(w,size.Width-(vertical?barW:0)),Math.Max(h,size.Height-(horizontal?barH:0)));
+    }
     void ResizeViewport(Panel viewport,Control content,int minWidth,int minHeight){
         if(viewport.ClientSize.Width<=0||viewport.ClientSize.Height<=0)return;
         int w=LogicalToDeviceUnits(minWidth),h=LogicalToDeviceUnits(minHeight);
         var size=viewport.Size;
         int barW=SystemInformation.VerticalScrollBarWidth,barH=SystemInformation.HorizontalScrollBarHeight;
-        bool vertical=size.Height<h,horizontal=size.Width<w;
-        vertical|=horizontal&&size.Height-barH<h;
-        horizontal|=vertical&&size.Width-barW<w;
-        var desired=new Size(Math.Max(w,size.Width-(vertical?barW:0)),Math.Max(h,size.Height-(horizontal?barH:0)));
+        var desired=CalculateViewport(size,w,h,barW,barH);
         if(content.Size!=desired)content.Size=desired;
         viewport.AutoScrollMinSize=new Size(w,h);
     }
@@ -74,9 +77,9 @@ sealed partial class MainForm{
             ("&Sugerir melhoria",FeedbackBase+"/new?template=suggestion.yml"),
             ("Consultar &relatos existentes",FeedbackBase),
             ("&Guia e documentação","https://efac000.github.io/software-dedicado-/#uso")}){
-            var b=new Button{Text=option.Text};Style(b);b.Click+=(_,_)=>Open(option.Url);body.Controls.Add(b);
+            var b=new ModernButton{Text=option.Text};Style(b);b.Click+=(_,_)=>Open(option.Url);body.Controls.Add(b);
         }
-        var close=new Button{Text="Fechar",DialogResult=DialogResult.Cancel};Style(close);body.Controls.Add(close);
+        var close=new ModernButton{Text="Fechar",DialogResult=DialogResult.Cancel};Style(close);body.Controls.Add(close);
         dialog.Controls.Add(body);dialog.CancelButton=close;
         PrepareAccessibility(dialog);dialog.ShowDialog(this);
     }

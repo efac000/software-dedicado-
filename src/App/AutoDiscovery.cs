@@ -108,8 +108,8 @@ sealed partial class MainForm {
         }
         var footer=new Label{Dock=DockStyle.Bottom,Height=55,ForeColor=Muted,Text="A detecção não pesquisa a unidade inteira, não executa arquivos e não lê tokens. Use Procurar para caminhos personalizados."};
         var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46,FlowDirection=FlowDirection.RightToLeft};
-        var manual=new Button{Text="Procurar manualmente"};Style(manual);manual.Click+=(_,_)=>{dialog.DialogResult=DialogResult.Retry;dialog.Close();};
-        var apply=new Button{Text="Usar seleção",DialogResult=DialogResult.OK};var cancel=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(apply);Style(cancel);
+        var manual=new ModernButton{Text="Procurar manualmente"};Style(manual);manual.Click+=(_,_)=>{dialog.DialogResult=DialogResult.Retry;dialog.Close();};
+        var apply=new ModernButton{Text="Usar seleção",DialogResult=DialogResult.OK};var cancel=new ModernButton{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(apply);Style(cancel);
         apply.Enabled=installs.SelectedItem!=null||worlds.SelectedItem!=null||cli.SelectedItem!=null;
         void Update()=>apply.Enabled=installs.SelectedItem!=null||worlds.SelectedItem!=null||cli.SelectedItem!=null;
         installs.SelectedIndexChanged+=(_,_)=>Update();worlds.SelectedIndexChanged+=(_,_)=>Update();cli.SelectedIndexChanged+=(_,_)=>Update();

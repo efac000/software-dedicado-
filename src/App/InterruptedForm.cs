@@ -12,7 +12,7 @@ sealed partial class MainForm{
         var label=new Label{AutoSize=true,Text="Digite exatamente: "+phrase};
         var input=new TextBox{Width=380,BackColor=PanelColor,ForeColor=Ink};
         var exclusiveInstall=new CheckBox{AutoSize=true,Text="Confirmo instalação exclusiva e servidor/reinício automático desligados."};
-        var recover=new Button{Text="Recuperar operação",Enabled=false,DialogResult=DialogResult.OK};var close=new Button{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(recover);Style(close);
+        var recover=new ModernButton{Text="Recuperar operação",Enabled=false,DialogResult=DialogResult.OK};var close=new ModernButton{Text="Cancelar",DialogResult=DialogResult.Cancel};Style(recover);Style(close);
         void Refresh()=>recover.Enabled=list.SelectedItem is string&&input.Text==phrase&&exclusiveInstall.Checked;
         list.SelectedIndexChanged+=(_,_)=>Refresh();input.TextChanged+=(_,_)=>Refresh();exclusiveInstall.CheckedChanged+=(_,_)=>Refresh();
         panel.Controls.AddRange(new Control[]{hint,list,exclusiveInstall,label,input,recover,close});dialog.Controls.Add(panel);dialog.CancelButton=close;
